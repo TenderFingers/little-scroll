@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Little Scroll</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Little Scroll">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@600;800&display=swap">
+<style>
+:root { color-scheme: light; }
+[hidden] { display: none !important; }
+/* Layout: one full-bleed vertical snap feed pinned to the screen. A small lock circle in the top corner (hold to open) leads to a bottom sheet for the parent. */
+:root {
+  --bg: #EEF0FB;
+  --surface: #FFFFFF;
+  --fg: #1E2142;
+  --muted: #565B84;
+  --accent: #D93A2F;
+  --on-accent: #FFFFFF;
+  --line: #D3D7EF;
+  --scrim: rgba(18, 20, 40, 0.42);
+  --scrim-fg: #FFFFFF;
+  --shade: rgba(10, 12, 30, 0.55);
+  --f-display: 'Fredoka', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
+  --f-body: 'Nunito', ui-rounded, system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121428;
+    --surface: #1D2040;
+    --fg: #F0F1FF;
+    --muted: #A4A9D4;
+    --accent: #FF7A6E;
+    --on-accent: #2A0E0B;
+    --line: #34386C;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121428;
+  --surface: #1D2040;
+  --fg: #F0F1FF;
+  --muted: #A4A9D4;
+  --accent: #FF7A6E;
+  --on-accent: #2A0E0B;
+  --line: #34386C;
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body {
+  box-sizing: border-box;
+  margin: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: var(--bg);
+  color: var(--fg);
+  font: 600 16px/1.45 var(--f-body);
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#feed {
+  position: fixed;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  overflow-anchor: none;
+  overscroll-behavior: none;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+#feed::-webkit-scrollbar { display: none; }
+
+.slide {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  scroll-snap-align: start;
+  background: var(--c, var(--surface));
+}
+.slide::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 50% 40%, rgba(255, 255, 255, 0.12) 20%, rgba(0, 0, 0, 0.38) 100%);
+  pointer-events: none;
+}
+.pic {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.pic.boing { animation: boing 0.5s cubic-bezier(0.3, 1.5, 0.5, 1); }
+@keyframes boing {
+  0% { transform: scale(1); }
+  35% { transform: scale(0.93); }
+  70% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+/* Parent gate */
+#gate {
+  position: fixed;
+  z-index: 10;
+  top: calc(env(safe-area-inset-top, 0px) + 10px);
+  right: calc(env(safe-area-inset-right, 0px) + 10px);
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--scrim);
+  color: var(--scrim-fg);
+  opacity: 0.6;
+  touch-action: none;
+  cursor: pointer;
+}
+#gate svg { display: block; width: 52px; height: 52px; }
+#gate .ring {
+  fill: none;
+  stroke: var(--scrim-fg);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 151;
+  stroke-dashoffset: 151;
+  transform: rotate(-90deg);
+  transform-origin: 26px 26px;
+}
+#gate.holding { opacity: 0.95; }
+#gate.holding .ring { animation: fill 1.4s linear forwards; }
+@keyframes fill { to { stroke-dashoffset: 0; } }
+#gate:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+/* Add-photos pill (sample mode only) */
+#addPill {
+  position: fixed;
+  z-index: 8;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 26px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  cursor: pointer;
+}
+#addPill strong { font: 600 21px/1.2 var(--f-display); }
+#addPill span { font-weight: 800; font-size: 14px; }
+
+#status {
+  position: fixed;
+  z-index: 30;
+  left: 50%;
+  top: calc(env(safe-area-inset-top, 0px) + 14px);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 100px);
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--scrim);
+  color: var(--scrim-fg);
+  font-weight: 800;
+  font-size: 15px;
+  text-align: center;
+}
+
+/* Parent sheet */
+#shade { position: fixed; inset: 0; z-index: 20; background: var(--shade); }
+#sheet {
+  position: fixed;
+  z-index: 21;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  max-width: 540px;
+  max-height: 92%;
+  margin: 0 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 24px;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  border-radius: 28px 28px 0 0;
+  background: var(--surface);
+  color: var(--fg);
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.28);
+  animation: up 0.26s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+@keyframes up { from { transform: translateY(28px); opacity: 0; } }
+#sheet h2 {
+  margin: 0;
+  font: 600 26px/1.15 var(--f-display);
+  text-wrap: balance;
+}
+.tip { margin: 0; color: var(--muted); font-size: 14px; max-width: 65ch; }
+.btn {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  padding: 0 18px;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--fg);
+  font: 800 17px/1.2 var(--f-body);
+  text-align: center;
+  cursor: pointer;
+}
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pic.boing, #sheet { animation: none; }
+}
+</style>
+</head>
+<body>
+
+<main id="feed" aria-label="Photo scroll"></main>
+
+<button id="gate" type="button" aria-label="Parent menu. Hold for about a second and a half to open.">
+  <svg viewBox="0 0 52 52" aria-hidden="true">
+    <circle class="ring" cx="26" cy="26" r="24"></circle>
+    <rect x="18" y="25" width="16" height="12" rx="3" fill="currentColor"></rect>
+    <path d="M21 25v-3a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></path>
+  </svg>
+</button>
+
+<label id="addPill" for="picker" hidden>
+  <strong>Add your photos</strong>
+  <span>Showing sample shapes</span>
+</label>
+
+<div id="status" role="status" aria-live="polite" hidden></div>
+
+<div id="shade" hidden></div>
+<section id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+  <h2 id="sheetTitle">Parent menu</h2>
+  <p id="count" class="tip"></p>
+  <label class="btn primary" for="picker">Add photos</label>
+  <button id="clear" class="btn" type="button" hidden>Remove all photos</button>
+  <button id="done" class="btn" type="button">Back to the scroll</button>
+  <p id="storeNote" class="tip" hidden>This browser is not keeping photos between visits, so you will need to add them again next time.</p>
+  <p class="tip">Open this menu by holding the lock circle in the top corner. To keep your child inside the app, turn on Guided Access in Settings under Accessibility, then triple-click the side button.</p>
+</section>
+
+<input id="picker" class="sr" type="file" accept="image/*" multiple>
+
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var feed = $('feed'), picker = $('picker'), sheet = $('sheet'), shade = $('shade');
+  var gate = $('gate'), pill = $('addPill'), statusEl = $('status'), countEl = $('count');
+  var clearBtn = $('clear'), doneBtn = $('done'), noteEl = $('storeNote');
+
+  var items = [];       // what the feed shows: { url, c }
+  var records = [];     // saved photos: { blob, c }
+  var urls = [];        // object URLs to release
+  var demo = true;
+  var bag = [], lastIdx = -1;
+  var settled = 0;
+  var db = null, dbOK = true;
+
+  /* ---------- storage (best effort) ---------- */
+  function openDB() {
+    return new Promise(function (res, rej) {
+      try {
+        var r = indexedDB.open('little-scroll', 1);
+        r.onupgradeneeded = function () { r.result.createObjectStore('photos', { autoIncrement: true }); };
+        r.onsuccess = function () { res(r.result); };
+        r.onerror = function () { rej(r.error); };
+        r.onblocked = function () { rej(new Error('blocked')); };
+      } catch (e) { rej(e); }
+    });
+  }
+  function tx(mode, fn) {
+    return new Promise(function (res, rej) {
+      var t = db.transaction('photos', mode);
+      var req = fn(t.objectStore('photos'));
+      t.oncomplete = function () { res(req && req.result); };
+      t.onerror = function () { rej(t.error); };
+      t.onabort = function () { rej(t.error); };
+    });
+  }
+  function loadStored() {
+    return openDB().then(function (d) { db = d; return tx('readonly', function (s) { return s.getAll(); }); })
+      .then(function (recs) { return recs || []; })
+      .catch(function () { dbOK = false; return []; });
+  }
+  function persist(rec) {
+    if (!dbOK || !db) return Promise.resolve();
+    return tx('readwrite', function (s) { return s.add(rec); }).catch(function () { dbOK = false; });
+  }
+
+  /* ---------- photo import ---------- */
+  function shrink(file) {
+    var MAX = 1600;
+    var url = null;
+    var getSource = createImageBitmap
+      ? createImageBitmap(file, { imageOrientation: 'from-image' }).catch(function () { return null; })
+      : Promise.resolve(null);
+    return getSource.then(function (bmp) {
+      if (bmp) return { src: bmp, w: bmp.width, h: bmp.height, bmp: bmp };
+      url = URL.createObjectURL(file);
+      return new Promise(function (res, rej) {
+        var im = new Image();
+        im.onload = function () { res({ src: im, w: im.naturalWidth, h: im.naturalHeight }); };
+        im.onerror = rej;
+        im.src = url;
+      });
+    }).then(function (o) {
+      var k = Math.min(1, MAX / Math.max(o.w, o.h));
+      var cw = Math.max(1, Math.round(o.w * k)), ch = Math.max(1, Math.round(o.h * k));
+      var cv = document.createElement('canvas');
+      cv.width = cw; cv.height = ch;
+      cv.getContext('2d').drawImage(o.src, 0, 0, cw, ch);
+      var sm = document.createElement('canvas');
+      sm.width = 8; sm.height = 8;
+      var sg = sm.getContext('2d');
+      sg.drawImage(cv, 0, 0, 8, 8);
+      var d = sg.getImageData(0, 0, 8, 8).data, r = 0, g = 0, b = 0, n = d.length / 4;
+      for (var i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+      var c = 'rgb(' + Math.round(r / n) + ', ' + Math.round(g / n) + ', ' + Math.round(b / n) + ')';
+      return new Promise(function (res, rej) {
+        cv.toBlob(function (blob) {
+          if (o.bmp && o.bmp.close) o.bmp.close();
+          if (url) URL.revokeObjectURL(url);
+          cv.width = 0; cv.height = 0;
+          blob ? res({ blob: blob, c: c }) : rej(new Error('encode'));
+        }, 'image/jpeg', 0.86);
+      });
+    }).catch(function (e) {
+      if (url) URL.revokeObjectURL(url);
+      throw e;
+    });
+  }
+
+  function importFiles(files) {
+    var list = files.filter(function (f) { return !f.type || f.type.indexOf('image/') === 0; });
+    if (!list.length) return Promise.resolve();
+    var failed = 0, i = 0;
+    function step() {
+      if (i >= list.length) return Promise.resolve();
+      showStatus('Adding photos... ' + (i + 1) + ' of ' + list.length);
+      return shrink(list[i]).then(function (rec) {
+        records.push(rec);
+        return persist(rec);
+      }).catch(function () { failed++; }).then(function () {
+        i++;
+        return new Promise(function (r) { setTimeout(r, 0); });
+      }).then(step);
+    }
+    return step().then(function () {
+      var ok = list.length - failed;
+      showStatus(failed ? ('Added ' + ok + '. ' + failed + ' could not be read.')
+                        : ('Added ' + ok + (ok === 1 ? ' photo.' : ' photos.')), 2800);
+      if (ok > 0) {
+        useRecords();
+        try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+      }
+    });
+  }
+
+  /* ---------- sample shapes so the page works before any photos are added ---------- */
+  function drawPoly(g, pts, fill) {
+    g.fillStyle = fill; g.strokeStyle = fill; g.lineJoin = 'round'; g.lineWidth = 36;
+    g.beginPath();
+    pts.forEach(function (p, i) { i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); });
+    g.closePath(); g.fill(); g.stroke();
+  }
+  function ngon(cx, cy, r, n, rot) {
+    var out = [];
+    for (var i = 0; i < n; i++) { var a = rot + i * 2 * Math.PI / n; out.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); }
+    return out;
+  }
+  function drawShape(g, kind, cx, cy, r, fill, bg) {
+    if (kind === 'circle') { g.fillStyle = fill; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill(); }
+    else if (kind === 'moon') {
+      g.fillStyle = fill; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+      g.fillStyle = bg; g.beginPath(); g.arc(cx + r * 0.5, cy - r * 0.2, r * 0.82, 0, Math.PI * 2); g.fill();
+    }
+    else if (kind === 'square') {
+      var s = r * 1.7, x = cx - s / 2, y = cy - s / 2, rr = s * 0.2;
+      g.fillStyle = fill; g.beginPath(); g.moveTo(x + rr, y);
+      g.arcTo(x + s, y, x + s, y + s, rr); g.arcTo(x + s, y + s, x, y + s, rr);
+      g.arcTo(x, y + s, x, y, rr); g.arcTo(x, y, x + s, y, rr); g.fill();
+    }
+    else if (kind === 'heart') {
+      g.fillStyle = fill; g.beginPath(); g.moveTo(cx, cy + r * 0.9);
+      g.bezierCurveTo(cx + r * 1.5, cy + r * 0.1, cx + r * 0.8, cy - r * 1.05, cx, cy - r * 0.35);
+      g.bezierCurveTo(cx - r * 0.8, cy - r * 1.05, cx - r * 1.5, cy + r * 0.1, cx, cy + r * 0.9); g.fill();
+    }
+    else if (kind === 'star') {
+      var pts = [];
+      for (var i = 0; i < 10; i++) { var a = -Math.PI / 2 + i * Math.PI / 5, rad = i % 2 ? r * 0.48 : r; pts.push([cx + rad * Math.cos(a), cy + rad * Math.sin(a)]); }
+      drawPoly(g, pts, fill);
+    }
+    else if (kind === 'triangle') drawPoly(g, ngon(cx, cy + r * 0.1, r * 0.95, 3, -Math.PI / 2), fill);
+    else if (kind === 'hexagon') drawPoly(g, ngon(cx, cy, r * 0.9, 6, 0), fill);
+    else if (kind === 'diamond') drawPoly(g, [[cx, cy - r * 1.05], [cx + r * 0.75, cy], [cx, cy + r * 1.05], [cx - r * 0.75, cy]], fill);
+  }
+  var SAMPLE = [
+    ['circle', '#FFD23F', '#E8453A'], ['star', '#4FB5E8', '#FFE066'], ['heart', '#7ED6A5', '#FF6F61'],
+    ['triangle', '#B58CF0', '#FFD23F'], ['square', '#FF9F5A', '#2E5BFF'], ['moon', '#2E3A8C', '#FFE066'],
+    ['hexagon', '#FF8FB8', '#1F9E6E'], ['diamond', '#59C9C0', '#FF6B5E']
+  ];
+  function makeDemo() {
+    var out = [], newUrls = [], chain = Promise.resolve();
+    SAMPLE.forEach(function (sp, idx) {
+      chain = chain.then(function () {
+        var cv = document.createElement('canvas');
+        cv.width = 720; cv.height = 1280;
+        var g = cv.getContext('2d');
+        g.fillStyle = sp[1]; g.fillRect(0, 0, 720, 1280);
+        var seed = idx * 7919 + 13;
+        var rnd = function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+        g.fillStyle = 'rgba(255,255,255,0.5)';
+        for (var k = 0; k < 7; k++) {
+          var top = rnd() < 0.5;
+          g.beginPath();
+          g.arc(70 + rnd() * 580, (top ? 90 + rnd() * 190 : 990 + rnd() * 190), 16 + rnd() * 30, 0, Math.PI * 2);
+          g.fill();
+        }
+        drawShape(g, sp[0], 360, 620, 250, sp[2], sp[1]);
+        return new Promise(function (res) { cv.toBlob(res, 'image/png'); }).then(function (blob) {
+          var u = URL.createObjectURL(blob);
+          newUrls.push(u);
+          out.push({ url: u, c: sp[1] });
+        });
+      });
+    });
+    return chain.then(function () {
+      demo = true;
+      setItems(out, newUrls);
+      updateUI();
+    });
+  }
+  function useRecords() {
+    var newUrls = [];
+    var out = records.map(function (r) {
+      var u = URL.createObjectURL(r.blob);
+      newUrls.push(u);
+      return { url: u, c: r.c };
+    });
+    demo = false;
+    setItems(out, newUrls);
+    updateUI();
+  }
+  function setItems(newItems, newUrls) {
+    feed.textContent = '';
+    urls.forEach(function (u) { URL.revokeObjectURL(u); });
+    urls = newUrls;
+    items = newItems;
+    rebuild();
+  }
+
+  /* ---------- the endless shuffled feed ---------- */
+  function shuffle(a) {
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function nextIdx() {
+    if (!bag.length) {
+      bag = shuffle(items.map(function (_, i) { return i; }));
+      if (items.length > 1 && bag[bag.length - 1] === lastIdx) {
+        var j = Math.floor(Math.random() * (bag.length - 1));
+        var t = bag[bag.length - 1]; bag[bag.length - 1] = bag[j]; bag[j] = t;
+      }
+    }
+    lastIdx = bag.pop();
+    return lastIdx;
+  }
+  function makeSlide(i) {
+    var s = document.createElement('section');
+    s.className = 'slide';
+    s.dataset.i = i;
+    s.style.setProperty('--c', items[i].c);
+    var im = new Image();
+    im.className = 'pic';
+    im.alt = '';
+    im.decoding = 'async';
+    im.draggable = false;
+    im.src = items[i].url;
+    s.appendChild(im);
+    return s;
+  }
+  function H() { return feed.clientHeight || window.innerHeight; }
+  function cur() { return Math.round(feed.scrollTop / H()); }
+  function setTop(v) {
+    feed.style.scrollSnapType = 'none';
+    feed.scrollTop = v;
+    void feed.offsetHeight;
+    feed.style.scrollSnapType = '';
+  }
+  function append() { feed.appendChild(makeSlide(nextIdx())); }
+  function prepend() {
+    var first = feed.firstElementChild;
+    var nb = first ? +first.dataset.i : -1;
+    var i = Math.floor(Math.random() * items.length);
+    if (items.length > 1 && i === nb) i = (i + 1 + Math.floor(Math.random() * (items.length - 1))) % items.length;
+    feed.insertBefore(makeSlide(i), first);
+    setTop(feed.scrollTop + H());
+  }
+  function balance() {
+    if (!items.length) return;
+    var c = cur();
+    while (c < 3) { prepend(); c++; }
+    while (feed.children.length - c < 6) append();
+    while (c > 6) { feed.removeChild(feed.firstElementChild); setTop(feed.scrollTop - H()); c--; }
+    while (feed.children.length - c > 12) feed.removeChild(feed.lastElementChild);
+    settled = cur();
+  }
+  function rebuild() {
+    feed.textContent = '';
+    bag = []; lastIdx = -1;
+    if (!items.length) return;
+    for (var k = 0; k < 7; k++) append();
+    requestAnimationFrame(function () { setTop(0); balance(); });
+  }
+
+  var idleT = 0;
+  feed.addEventListener('scroll', function () {
+    if (items.length && feed.children.length - cur() < 4) append();
+    clearTimeout(idleT);
+    idleT = setTimeout(balance, 160);
+  }, { passive: true });
+
+  var resizeT = 0;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeT);
+    resizeT = setTimeout(function () { if (feed.children.length) setTop(settled * H()); }, 140);
+  });
+
+  feed.addEventListener('click', function (e) {
+    var s = e.target.closest('.slide');
+    if (!s) return;
+    var im = s.firstElementChild;
+    im.classList.remove('boing');
+    void im.offsetWidth;
+    im.classList.add('boing');
+  });
+  feed.addEventListener('animationend', function (e) { e.target.classList.remove('boing'); });
+
+  /* ---------- parent gate and sheet ---------- */
+  var holdT = 0;
+  function endHold() { clearTimeout(holdT); gate.classList.remove('holding'); }
+  gate.addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    gate.classList.add('holding');
+    clearTimeout(holdT);
+    holdT = setTimeout(function () { gate.classList.remove('holding'); openSheet(); }, 1400);
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (t) { gate.addEventListener(t, endHold); });
+  gate.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  gate.addEventListener('keydown', function (e) { if (e.key === 'Enter') openSheet(); });
+
+  function openSheet() { updateUI(); sheet.hidden = false; shade.hidden = false; }
+  function closeSheet() { sheet.hidden = true; shade.hidden = true; resetClear(); }
+  shade.addEventListener('click', closeSheet);
+  doneBtn.addEventListener('click', closeSheet);
+
+  var armed = false, armT = 0;
+  function resetClear() { armed = false; clearTimeout(armT); clearBtn.textContent = 'Remove all photos'; }
+  clearBtn.addEventListener('click', function () {
+    if (!armed) {
+      armed = true;
+      clearBtn.textContent = 'Tap again to remove all photos';
+      armT = setTimeout(resetClear, 4000);
+      return;
+    }
+    resetClear();
+    records = [];
+    var wipe = (dbOK && db) ? tx('readwrite', function (s) { return s.clear(); }).catch(function () {}) : Promise.resolve();
+    wipe.then(function () { closeSheet(); makeDemo(); });
+  });
+
+  picker.addEventListener('change', function () {
+    var files = Array.prototype.slice.call(picker.files || []);
+    picker.value = '';
+    closeSheet();
+    importFiles(files);
+  });
+
+  function updateUI() {
+    pill.hidden = !demo;
+    clearBtn.hidden = demo;
+    noteEl.hidden = dbOK;
+    countEl.textContent = demo ? 'No photos added yet. The scroll is showing sample shapes.'
+      : records.length + (records.length === 1 ? ' photo is' : ' photos are') + ' in the scroll, shuffled forever.';
+  }
+  var stT = 0;
+  function showStatus(t, ms) {
+    statusEl.textContent = t;
+    statusEl.hidden = false;
+    clearTimeout(stT);
+    if (ms) stT = setTimeout(function () { statusEl.hidden = true; }, ms);
+  }
+
+  /* ---------- small extras ---------- */
+  var wl = null;
+  function keepAwake() {
+    try {
+      if ('wakeLock' in navigator && document.visibilityState === 'visible' && !(wl && !wl.released)) {
+        navigator.wakeLock.request('screen').then(function (l) { wl = l; }).catch(function () {});
+      }
+    } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', keepAwake);
+  feed.addEventListener('touchstart', keepAwake, { passive: true });
+  keepAwake();
+
+  try {
+    var ic = document.createElement('canvas');
+    ic.width = ic.height = 180;
+    var ig = ic.getContext('2d');
+    ig.fillStyle = '#4FB5E8'; ig.fillRect(0, 0, 180, 180);
+    ig.fillStyle = '#FFD23F'; ig.beginPath(); ig.arc(90, 90, 54, 0, Math.PI * 2); ig.fill();
+    ig.fillStyle = '#E8453A'; ig.beginPath(); ig.arc(122, 62, 22, 0, Math.PI * 2); ig.fill();
+    var lk = document.createElement('link');
+    lk.rel = 'apple-touch-icon';
+    lk.href = ic.toDataURL('image/png');
+    document.head.appendChild(lk);
+  } catch (e) {}
+
+  /* ---------- start ---------- */
+  var timeout = new Promise(function (r) { setTimeout(function () { r(null); }, 2500); });
+  Promise.race([loadStored(), timeout]).then(function (stored) {
+    if (stored === null) dbOK = false;
+    if (stored && stored.length) { records = stored; useRecords(); }
+    else makeDemo();
+  }).catch(function () { dbOK = false; makeDemo(); });
+})();
+</script>
+</body>
+</html>
