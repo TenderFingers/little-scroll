@@ -3,12 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="theme-color" content="#4FB5E8">
 <title>Little Scroll</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Little Scroll">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@600;800&display=swap">
 <style>
 :root { color-scheme: light; }
 [hidden] { display: none !important; }
@@ -25,8 +27,8 @@
   --black: #000000;
   --scrim-fg: #FFFFFF;
   --shade: rgba(10, 12, 30, 0.55);
-  --f-display: 'Fredoka', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
-  --f-body: 'Nunito', ui-rounded, system-ui, sans-serif;
+  --f-display: ui-rounded, 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', system-ui, sans-serif;
+  --f-body: ui-rounded, 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -357,20 +359,43 @@ body {
   cursor: pointer;
 }
 .thumb img { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
-.thumb .rm {
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
-  display: none;
-  padding: 6px 4px;
+.thumb[aria-pressed="true"] { border-color: var(--accent); }
+.thumb .vc {
+  position: absolute; top: 4px; right: 4px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
   background: var(--accent);
   color: var(--on-accent);
-  font: 800 13px/1.1 var(--f-body);
+  font: 800 14px/22px var(--f-body);
   text-align: center;
 }
-.thumb[aria-pressed="true"] { border-color: var(--accent); }
-.thumb[aria-pressed="true"] .rm { display: block; }
 .thumb:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 #sleep { position: fixed; inset: 0; z-index: 40; background: var(--black); touch-action: none; cursor: pointer; }
+
+#ask {
+  position: fixed;
+  z-index: 22;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  width: min(calc(100% - 32px), 360px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 18px 18px;
+  border-radius: 24px;
+  background: var(--surface);
+  color: var(--fg);
+  text-align: center;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+}
+#ask p { margin: 0; font: 600 20px/1.2 var(--f-display); }
+#ask #askQ { font-size: 42px; }
+#askBtns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+#askBtns .btn { min-height: 68px; font-size: 28px; }
+.actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.btn.rec { background: var(--accent); color: var(--on-accent); border-color: transparent; }
 
 .sr {
   position: absolute;
@@ -419,15 +444,30 @@ body {
   <label class="btn primary" for="picker">Add photos</label>
   <button id="manage" class="btn" type="button" hidden>Choose photos to remove</button>
   <div id="managePanel" class="field" hidden>
-    <p class="tip">Tap a photo, then tap it again to remove it.</p>
+    <p class="tip">Tap a photo to choose it. Then you can record its name (like "Grandma!") or remove it. Recordings stay on this phone.</p>
     <div id="grid" class="grid"></div>
+    <div id="photoActions" class="actions" hidden>
+      <button id="recBtn" class="btn" type="button">Record a name</button>
+      <button id="playBtn" class="btn" type="button" hidden>Play name</button>
+      <button id="delVoiceBtn" class="btn" type="button" hidden>Delete name</button>
+      <button id="rmBtn" class="btn" type="button">Remove photo</button>
+    </div>
+    <p id="voiceNote" class="tip" hidden></p>
   </div>
   <div id="opts" class="opts"></div>
   <button id="clear" class="btn" type="button" hidden>Remove all photos</button>
   <button id="done" class="btn" type="button">Back to the scroll</button>
   <p id="storeNote" class="tip" hidden>This browser is not keeping photos between visits, so you will need to add them again next time.</p>
   <p class="tip">Your child can tap a photo for a reaction, double-tap to spin it, and hold a finger down for fireworks.</p>
+  <p id="ver" class="tip"></p>
   <p class="tip">Open this menu by holding the lock circle in the top corner. To keep your child inside the app, turn on Guided Access in Settings under Accessibility, then triple-click the side button.</p>
+</section>
+
+<section id="ask" role="dialog" aria-modal="true" aria-labelledby="askQ" hidden>
+  <p>Grown-ups only. What is</p>
+  <p id="askQ"></p>
+  <div id="askBtns"></div>
+  <button id="askCancel" class="btn" type="button">Cancel</button>
 </section>
 
 <input id="picker" class="sr" type="file" accept="image/*" multiple>
@@ -442,8 +482,12 @@ body {
   var clearBtn = $('clear'), doneBtn = $('done'), noteEl = $('storeNote');
   var fxCv = $('fx'), sleepEl = $('sleep');
   var manageBtn = $('manage'), managePanel = $('managePanel'), grid = $('grid'), optsEl = $('opts');
+  var photoActions = $('photoActions'), recBtn = $('recBtn'), playBtn = $('playBtn'), delVoiceBtn = $('delVoiceBtn'), rmBtn = $('rmBtn'), voiceNote = $('voiceNote');
+  var ask = $('ask'), askQ = $('askQ'), askBtns = $('askBtns'), askT = 0, askAns = 0;
+  var voiceEl = new Audio();
 
-  var cfg = { dir: 'v', auto: 'off', react: 'bounce', fx: 'streak', sound: 'quiet', sleep: '5' };
+  var VERSION = '2026-11-05a';
+  var cfg = { dir: 'v', auto: 'off', react: 'bounce', fx: 'streak', sound: 'quiet', sleep: '5', voice: 'tap', gate: 'math' };
   try {
     var saved = JSON.parse(localStorage.getItem('ls-cfg') || 'null');
     if (saved) {
@@ -494,7 +538,7 @@ body {
         var req = t.objectStore('photos').openCursor();
         req.onsuccess = function () {
           var c = req.result;
-          if (c) { out.push({ key: c.key, blob: c.value.blob, c: c.value.c }); c.continue(); }
+          if (c) { out.push({ key: c.key, blob: c.value.blob, c: c.value.c, voice: c.value.voice || null, vtype: c.value.vtype || null }); c.continue(); }
         };
         t.oncomplete = function () { res(out); };
         t.onerror = t.onabort = function () { rej(t.error); };
@@ -510,6 +554,12 @@ body {
   function unpersist(rec) {
     if (!dbOK || !db || rec.key === undefined) return Promise.resolve();
     return tx('readwrite', function (s) { return s.delete(rec.key); }).catch(function () {});
+  }
+  function saveRec(rec) {
+    if (!dbOK || !db || rec.key === undefined) return Promise.resolve();
+    return tx('readwrite', function (s) {
+      return s.put({ blob: rec.blob, c: rec.c, voice: rec.voice || null, vtype: rec.vtype || null }, rec.key);
+    }).catch(function () {});
   }
 
   /* ---------- photo import ---------- */
@@ -660,7 +710,7 @@ body {
     var out = records.map(function (r) {
       var u = URL.createObjectURL(r.blob);
       newUrls.push(u);
-      return { url: u, c: r.c };
+      return { url: u, c: r.c, voice: r.voice };
     });
     demo = false;
     setItems(out, newUrls);
@@ -669,6 +719,7 @@ body {
   function setItems(newItems, newUrls) {
     feed.textContent = '';
     urls.forEach(function (u) { URL.revokeObjectURL(u); });
+    items.forEach(function (it) { if (it.vurl) URL.revokeObjectURL(it.vurl); });
     urls = newUrls;
     items = newItems;
     rebuild();
@@ -809,6 +860,17 @@ body {
     else if (m === 'confetti') emit('confetti', x, y, 34);
     sfx('pop');
   }
+  function speak(im) {
+    if (cfg.voice !== 'tap') return;
+    var sl = im.parentNode, it = sl && items[+sl.dataset.i];
+    if (!it || !it.voice) return;
+    try {
+      if (!it.vurl) it.vurl = URL.createObjectURL(it.voice);
+      voiceEl.src = it.vurl;
+      var pr = voiceEl.play();
+      if (pr && pr.catch) pr.catch(function () {});
+    } catch (e) {}
+  }
   function endPress() {
     if (press) clearTimeout(press.timer);
     press = null;
@@ -849,6 +911,7 @@ body {
     } else {
       lastTap = { t: now, x: e.clientX, y: e.clientY };
       react(im, e.clientX, e.clientY);
+      speak(im);
     }
   });
   feed.addEventListener('pointercancel', function (e) { if (press && e.pointerId === press.id) endPress(); });
@@ -973,7 +1036,7 @@ body {
     if (!autoOn()) { autoMoving = false; feed.style.scrollSnapType = ''; return; }
     var dt = Math.min(0.05, (t - autoLast) / 1000) || 0;
     autoLast = t;
-    var busy = !sheet.hidden || !!press || t < autoHoldUntil || !items.length;
+    var busy = !sheet.hidden || !ask.hidden || !!press || t < autoHoldUntil || !items.length;
     if (busy) {
       if (autoMoving) { autoMoving = false; feed.style.scrollSnapType = ''; }
     } else {
@@ -1000,7 +1063,7 @@ body {
     if (!ms || sleeping) return;
     var left = ms - (performance.now() - lastInput);
     sleepT = setTimeout(function () {
-      if (!sheet.hidden) lastInput = performance.now();
+      if (!sheet.hidden || !ask.hidden) lastInput = performance.now();
       if (performance.now() - lastInput >= ms - 50) goToSleep(); else armSleep();
     }, Math.max(left, 250));
   }
@@ -1037,8 +1100,12 @@ body {
     { key: 'fx', label: 'Fireworks when held', vals: [['off', 'Off'], ['streak', 'Streaks'], ['sparkle', 'Sparkles'], ['bubble', 'Bubbles'], ['star', 'Stars']] },
     { key: 'sound', label: 'Sounds', vals: [['off', 'Off'], ['quiet', 'Quiet'], ['normal', 'Normal']],
       tip: 'A pop on tap, a chime on spin, and a soft tick when the photo changes. The ringer switch can mute it on some phones.' },
+    { key: 'voice', label: 'Recorded names', vals: [['off', 'Off'], ['tap', 'Play on tap']],
+      tip: 'Plays the name you recorded for a photo when your child taps it. Record names under "Choose photos to remove".' },
     { key: 'sleep', label: 'Go dark after no touching', vals: [['0', 'Never'], ['2', '2 min'], ['5', '5 min'], ['10', '10 min']],
-      tip: 'The screen turns fully black and the app stops working so the battery lasts. A touch wakes it. With Never, the screen stays on until the phone locks it.' }
+      tip: 'The screen turns fully black and the app stops working so the battery lasts. A touch wakes it. With Never, the screen stays on until the phone locks it.' },
+    { key: 'gate', label: 'Opening this menu', vals: [['hold', 'Hold only'], ['math', 'Hold, then a question']],
+      tip: 'The question is a simple sum that only grown-ups will answer.' }
   ];
   OPTS.forEach(function (o) {
     var f = document.createElement('div'); f.className = 'field';
@@ -1103,9 +1170,10 @@ body {
       b.setAttribute('aria-label', 'Photo ' + (i + 1));
       b.style.background = rec.c;
       var im = new Image(); im.alt = ''; b.appendChild(im); imgs.push(im);
-      var rm = document.createElement('span'); rm.className = 'rm'; rm.textContent = 'Tap to remove'; b.appendChild(rm);
       grid.appendChild(b);
     });
+    markVoiceBadges();
+    refreshActions();
     var n = 0;
     (function next() {
       if (run !== thumbRun || n >= records.length) return;
@@ -1119,26 +1187,117 @@ body {
     })();
   }
   function closeManage() {
+    stopRec();
+    setVoiceNote('');
+    photoActions.hidden = true;
     managePanel.hidden = true;
     dropThumbs();
     updateUI();
   }
+  var recState = null, rmArmed = false, rmT = 0, prevPlay = null;
+  function setVoiceNote(t) { voiceNote.textContent = t || ''; voiceNote.hidden = !t; }
+  function setSession(type) { try { if (navigator.audioSession) navigator.audioSession.type = type; } catch (e) {} }
+  function resetRm() { rmArmed = false; clearTimeout(rmT); rmBtn.textContent = 'Remove photo'; }
+  function refreshActions() {
+    var rec = picked >= 0 ? records[picked] : null;
+    photoActions.hidden = !rec;
+    if (!rec) return;
+    var on = !!recState;
+    recBtn.textContent = on ? 'Stop recording' : (rec.voice ? 'Record again' : 'Record a name');
+    recBtn.classList.toggle('rec', on);
+    playBtn.hidden = !rec.voice || on;
+    delVoiceBtn.hidden = !rec.voice || on;
+    rmBtn.hidden = on;
+  }
+  function markVoiceBadges() {
+    grid.querySelectorAll('.thumb').forEach(function (t, j) {
+      var has = !!(records[j] && records[j].voice), v = t.querySelector('.vc');
+      if (has && !v) { v = document.createElement('span'); v.className = 'vc'; v.textContent = '♪'; t.appendChild(v); }
+      else if (!has && v) v.remove();
+    });
+  }
   grid.addEventListener('click', function (e) {
     var b = e.target.closest('.thumb');
-    if (!b) return;
+    if (!b || recState) return;
     var i = +b.dataset.i;
-    if (picked !== i) {
-      picked = i;
-      grid.querySelectorAll('.thumb').forEach(function (t) { t.setAttribute('aria-pressed', String(t === b)); });
-      return;
-    }
-    var rec = records.splice(i, 1)[0];
+    picked = picked === i ? -1 : i;
+    grid.querySelectorAll('.thumb').forEach(function (t) { t.setAttribute('aria-pressed', String(+t.dataset.i === picked)); });
+    resetRm(); setVoiceNote(''); refreshActions();
+  });
+  rmBtn.addEventListener('click', function () {
+    var rec = records[picked];
+    if (!rec) return;
+    if (!rmArmed) { rmArmed = true; rmBtn.textContent = 'Tap again to remove'; rmT = setTimeout(resetRm, 4000); return; }
+    resetRm();
+    var b = grid.querySelector('.thumb[data-i="' + picked + '"]');
+    records.splice(picked, 1);
     picked = -1;
     dirty = true;
-    b.remove();
+    if (b) b.remove();
     grid.querySelectorAll('.thumb').forEach(function (t, j) { t.dataset.i = j; });
     unpersist(rec);
+    refreshActions();
     if (!records.length) closeManage(); else updateUI();
+  });
+  function stopRec() { if (recState && recState.mr.state !== 'inactive') recState.mr.stop(); }
+  function finishRec(st) {
+    clearTimeout(st.timer);
+    st.stream.getTracks().forEach(function (t) { t.stop(); });
+    if (recState === st) recState = null;
+    setSession('playback');
+    var blob = new Blob(st.chunks, { type: st.mr.mimeType || 'audio/mp4' });
+    if (blob.size > 0) {
+      st.rec.voice = blob; st.rec.vtype = blob.type;
+      dirty = true;
+      saveRec(st.rec);
+      setVoiceNote('Saved.');
+    } else setVoiceNote('Nothing was recorded. Try again.');
+    markVoiceBadges(); refreshActions();
+  }
+  recBtn.addEventListener('click', function () {
+    if (recState) { stopRec(); return; }
+    var rec = records[picked];
+    if (!rec) return;
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder)) {
+      setVoiceNote('Recording is not available here. It works in the installed copy of the app.');
+      return;
+    }
+    setVoiceNote('');
+    setSession('play-and-record');
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      var types = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'], mt = '';
+      for (var k = 0; k < types.length; k++) { if (MediaRecorder.isTypeSupported(types[k])) { mt = types[k]; break; } }
+      var mr = mt ? new MediaRecorder(stream, { mimeType: mt }) : new MediaRecorder(stream);
+      var st = { rec: rec, mr: mr, chunks: [], stream: stream, timer: 0 };
+      mr.ondataavailable = function (ev) { if (ev.data && ev.data.size) st.chunks.push(ev.data); };
+      mr.onstop = function () { finishRec(st); };
+      recState = st;
+      mr.start();
+      st.timer = setTimeout(stopRec, 8000);
+      refreshActions();
+      setVoiceNote('Recording. Say the name, then tap Stop. It stops by itself after 8 seconds.');
+    }).catch(function () {
+      setSession('playback');
+      setVoiceNote('The microphone is blocked. Allow it for this app in the iPhone Settings, then try again.');
+    });
+  });
+  playBtn.addEventListener('click', function () {
+    var rec = records[picked];
+    if (!rec || !rec.voice) return;
+    if (prevPlay) URL.revokeObjectURL(prevPlay);
+    prevPlay = URL.createObjectURL(rec.voice);
+    voiceEl.src = prevPlay;
+    var pr = voiceEl.play();
+    if (pr && pr.catch) pr.catch(function () {});
+  });
+  delVoiceBtn.addEventListener('click', function () {
+    var rec = records[picked];
+    if (!rec) return;
+    rec.voice = null; rec.vtype = null;
+    dirty = true;
+    saveRec(rec);
+    markVoiceBadges(); refreshActions();
+    setVoiceNote('Name removed.');
   });
 
   /* ---------- parent gate and sheet ---------- */
@@ -1148,15 +1307,51 @@ body {
     e.preventDefault();
     gate.classList.add('holding');
     clearTimeout(holdT);
-    holdT = setTimeout(function () { gate.classList.remove('holding'); openSheet(); }, 1400);
+    holdT = setTimeout(function () { gate.classList.remove('holding'); gateOpen(); }, 1400);
   });
   ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (t) { gate.addEventListener(t, endHold); });
   gate.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-  gate.addEventListener('keydown', function (e) { if (e.key === 'Enter') openSheet(); });
+  gate.addEventListener('keydown', function (e) { if (e.key === 'Enter') gateOpen(); });
 
   function openSheet() { updateUI(); sheet.hidden = false; shade.hidden = false; }
+  function gateOpen() {
+    if (cfg.gate === 'hold') { openSheet(); return; }
+    askQuestion();
+  }
+  function askQuestion() {
+    var a = 3 + ((Math.random() * 7) | 0), b = 3 + ((Math.random() * 7) | 0);
+    askAns = a + b;
+    var opts = [askAns];
+    while (opts.length < 4) {
+      var w = askAns + ((Math.random() * 9) | 0) - 4;
+      if (w > 1 && opts.indexOf(w) < 0) opts.push(w);
+    }
+    shuffle(opts);
+    askQ.textContent = a + ' + ' + b + ' = ?';
+    askBtns.textContent = '';
+    opts.forEach(function (n) {
+      var bt = document.createElement('button');
+      bt.type = 'button'; bt.className = 'btn'; bt.textContent = String(n); bt.dataset.n = n;
+      askBtns.appendChild(bt);
+    });
+    ask.hidden = false; shade.hidden = false;
+    clearTimeout(askT);
+    askT = setTimeout(closeAsk, 20000);
+  }
+  function closeAsk() {
+    clearTimeout(askT);
+    ask.hidden = true;
+    if (sheet.hidden) shade.hidden = true;
+  }
+  askBtns.addEventListener('click', function (e) {
+    var bt = e.target.closest('.btn');
+    if (!bt) return;
+    if (+bt.dataset.n === askAns) { closeAsk(); openSheet(); } else askQuestion();
+  });
+  $('askCancel').addEventListener('click', closeAsk);
   function closeSheet() {
     sheet.hidden = true; shade.hidden = true; resetClear();
+    closeAsk();
     closeManage();
     if (dirty) { dirty = false; if (records.length) useRecords(); else makeDemo(); }
   }
@@ -1192,6 +1387,7 @@ body {
     pill.hidden = !demo;
     clearBtn.hidden = demo;
     noteEl.hidden = dbOK;
+    $('ver').textContent = 'Version ' + VERSION;
     optsEl.querySelectorAll('.seg-btn').forEach(function (b) {
       b.setAttribute('aria-pressed', String(cfg[b.dataset.key] === b.dataset.val));
     });
@@ -1221,6 +1417,7 @@ body {
   keepAwake();
 
   try {
+    if (document.querySelector('link[rel="apple-touch-icon"]')) throw 0;
     var ic = document.createElement('canvas');
     ic.width = ic.height = 180;
     var ig = ic.getContext('2d');
@@ -1244,5 +1441,6 @@ body {
   armSleep();
 })();
 </script>
+<script>if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); }); }</script>
 </body>
 </html>
