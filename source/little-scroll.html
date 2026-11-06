@@ -431,6 +431,7 @@ body {
   </div>
   <p id="count" class="tip"></p>
   <label class="btn primary" for="picker">Add photos</label>
+  <p class="tip">After you tap Add in the iPhone picker, the iPhone gets each photo ready before the app can see it. That can take several seconds with nothing moving, and longer for many photos or photos kept in iCloud. Wait for "Adding photos" to appear at the top. Picking 10 to 20 at a time is faster.</p>
   <button id="manage" class="btn" type="button" hidden>Choose photos to remove</button>
   <div id="managePanel" class="field" hidden>
     <p class="tip">Tap a photo to choose it. Then you can record its name (like "Grandma!") or remove it. Recordings stay on this phone.</p>
@@ -475,7 +476,7 @@ body {
   var ask = $('ask'), askQ = $('askQ'), askBtns = $('askBtns'), askT = 0, askAns = 0;
   var voiceEl = new Audio();
 
-  var VERSION = '2026-11-05a';
+  var VERSION = '2026-11-06a';
   var cfg = { dir: 'v', auto: 'off', react: 'bounce', fx: 'streak', sound: 'quiet', sleep: '5', voice: 'tap', gate: 'math' };
   try {
     var saved = JSON.parse(localStorage.getItem('ls-cfg') || 'null');
