@@ -496,7 +496,7 @@ body {
   var ask = $('ask'), askQ = $('askQ'), askBtns = $('askBtns'), askT = 0, askAns = 0;
   var voiceEl = new Audio();
 
-  var VERSION = '2026-11-06c';
+  var VERSION = '2026-11-06d';
   var DEFAULTS = { dir: 'v', auto: 'off', react: 'bounce', spin: 'on', fx: 'streak', sound: 'quiet', fit: 'fit', sleep: '5', voice: 'tap', gate: 'math' };
   var cfg = {};
   for (var dk in DEFAULTS) cfg[dk] = DEFAULTS[dk];
@@ -928,6 +928,8 @@ body {
     }
   });
   feed.addEventListener('pointercancel', function (e) { if (press && e.pointerId === press.id) endPress(); });
+  // Once the fireworks have started, dragging moves them and the feed stays put until the finger lifts.
+  feed.addEventListener('touchmove', function (e) { if (press && press.holding && e.cancelable) e.preventDefault(); }, { passive: false });
   feed.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   feed.addEventListener('animationend', function (e) { e.target.classList.remove('boing', 'spin', 'wobble'); });
 
@@ -1015,7 +1017,14 @@ body {
     fxLast = t;
     if (fxOn) {
       fxAcc += dt;
-      while (fxAcc >= 0.05) { fxAcc -= 0.05; emit(cfg.fx, pt.x, pt.y, cfg.fx === 'bubble' ? 3 : 6); }
+      var n = Math.floor(fxAcc / 0.05);
+      if (n > 0) {
+        fxAcc -= n * 0.05;
+        for (var q = 1; q <= n; q++) {
+          emit(cfg.fx, ep.x + (pt.x - ep.x) * q / n, ep.y + (pt.y - ep.y) * q / n, cfg.fx === 'bubble' ? 3 : 6);
+        }
+        ep.x = pt.x; ep.y = pt.y;
+      }
     }
     fxCtx.setTransform(1, 0, 0, 1, 0, 0);
     fxCtx.clearRect(0, 0, fxCv.width, fxCv.height);
@@ -1036,7 +1045,8 @@ body {
     fxRaf = (fxOn || sparks.length) ? requestAnimationFrame(fxFrame) : 0;
   }
   function ensureFx() { if (!fxRaf) { fxLast = performance.now(); fxRaf = requestAnimationFrame(fxFrame); } }
-  function startFx() { fxOn = true; fxAcc = 0.05; ensureFx(); }
+  var ep = { x: 0, y: 0 };
+  function startFx() { fxOn = true; fxAcc = 0.05; ep.x = pt.x; ep.y = pt.y; ensureFx(); }
   function stopFx() { fxOn = false; }
   sizeFx();
 
