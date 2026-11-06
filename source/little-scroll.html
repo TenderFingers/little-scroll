@@ -1,0 +1,1432 @@
+<title>Little Scroll</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Little Scroll">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+/* Layout: one full-bleed vertical snap feed pinned to the screen. A small lock circle in the top corner (hold to open) leads to a bottom sheet for the parent. */
+:root {
+  --bg: #EEF0FB;
+  --surface: #FFFFFF;
+  --fg: #1E2142;
+  --muted: #565B84;
+  --accent: #D93A2F;
+  --on-accent: #FFFFFF;
+  --line: #D3D7EF;
+  --scrim: rgba(18, 20, 40, 0.42);
+  --black: #000000;
+  --scrim-fg: #FFFFFF;
+  --shade: rgba(10, 12, 30, 0.55);
+  --f-display: ui-rounded, 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', system-ui, sans-serif;
+  --f-body: ui-rounded, 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121428;
+    --surface: #1D2040;
+    --fg: #F0F1FF;
+    --muted: #A4A9D4;
+    --accent: #FF7A6E;
+    --on-accent: #2A0E0B;
+    --line: #34386C;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121428;
+  --surface: #1D2040;
+  --fg: #F0F1FF;
+  --muted: #A4A9D4;
+  --accent: #FF7A6E;
+  --on-accent: #2A0E0B;
+  --line: #34386C;
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body {
+  box-sizing: border-box;
+  margin: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: var(--bg);
+  color: var(--fg);
+  font: 600 16px/1.45 var(--f-body);
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#feed {
+  position: fixed;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  overflow-anchor: none;
+  overscroll-behavior: none;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+#feed::-webkit-scrollbar { display: none; }
+#feed.h {
+  display: flex;
+  flex-direction: row;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  touch-action: pan-x;
+}
+#feed.h .slide { flex: 0 0 100%; }
+
+.slide {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  scroll-snap-align: start;
+  background: var(--c, var(--surface));
+}
+.slide::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 50% 40%, rgba(255, 255, 255, 0.12) 20%, rgba(0, 0, 0, 0.38) 100%);
+  pointer-events: none;
+}
+.pic {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.pic.boing { animation: boing 0.5s cubic-bezier(0.3, 1.5, 0.5, 1); }
+.pic.spin {
+  animation: spin-turn 1.8s cubic-bezier(0.3, 0.6, 0.2, 1), spin-dip 1.8s ease-in-out;
+  will-change: transform;
+}
+@keyframes spin-turn { from { rotate: 0deg; } to { rotate: 1080deg; } }
+@keyframes spin-dip { 0%, 100% { scale: 1; } 50% { scale: 0.74; } }
+@keyframes calm { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+/* Fireworks layer */
+#fx {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+@keyframes boing {
+  0% { transform: scale(1); }
+  35% { transform: scale(0.93); }
+  70% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+/* Parent gate */
+#gate {
+  position: fixed;
+  z-index: 10;
+  top: calc(env(safe-area-inset-top, 0px) + 10px);
+  right: calc(env(safe-area-inset-right, 0px) + 10px);
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--scrim);
+  color: var(--scrim-fg);
+  opacity: 0.6;
+  touch-action: none;
+  cursor: pointer;
+}
+#gate svg { display: block; width: 52px; height: 52px; }
+#gate .ring {
+  fill: none;
+  stroke: var(--scrim-fg);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 151;
+  stroke-dashoffset: 151;
+  transform: rotate(-90deg);
+  transform-origin: 26px 26px;
+}
+#gate.holding { opacity: 0.95; }
+#gate.holding .ring { animation: fill 1.4s linear forwards; }
+@keyframes fill { to { stroke-dashoffset: 0; } }
+#gate:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+/* Add-photos pill (sample mode only) */
+#addPill {
+  position: fixed;
+  z-index: 8;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 26px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  cursor: pointer;
+}
+#addPill strong { font: 600 21px/1.2 var(--f-display); }
+#addPill span { font-weight: 800; font-size: 14px; }
+
+#status {
+  position: fixed;
+  z-index: 30;
+  left: 50%;
+  top: calc(env(safe-area-inset-top, 0px) + 14px);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 100px);
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--scrim);
+  color: var(--scrim-fg);
+  font-weight: 800;
+  font-size: 15px;
+  text-align: center;
+}
+
+/* Parent sheet */
+#shade { position: fixed; inset: 0; z-index: 20; background: var(--shade); }
+#sheet {
+  position: fixed;
+  z-index: 21;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  max-width: 540px;
+  max-height: 92%;
+  margin: 0 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 24px;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  border-radius: 28px 28px 0 0;
+  background: var(--surface);
+  color: var(--fg);
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.28);
+  animation: up 0.26s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+@keyframes up { from { transform: translateY(28px); opacity: 0; } }
+#sheet h2 {
+  margin: 0;
+  font: 600 26px/1.15 var(--f-display);
+  text-wrap: balance;
+}
+.tip { margin: 0; color: var(--muted); font-size: 14px; max-width: 65ch; }
+.btn {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  padding: 0 18px;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--fg);
+  font: 800 17px/1.2 var(--f-body);
+  text-align: center;
+  cursor: pointer;
+}
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.label { font-weight: 800; font-size: 14px; color: var(--muted); }
+.seg {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 6px;
+  padding: 5px;
+  border-radius: 18px;
+  background: var(--bg);
+}
+.seg-btn {
+  min-height: 48px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 13px;
+  background: transparent;
+  color: var(--fg);
+  font: 800 16px/1.2 var(--f-body);
+  cursor: pointer;
+}
+.seg-btn[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 64px;
+  padding: 10px 16px;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.row-text strong { font: 800 17px/1.2 var(--f-body); }
+.row-text span { color: var(--muted); font-size: 14px; font-weight: 600; }
+.knob {
+  position: relative;
+  flex: none;
+  width: 52px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--muted);
+  transition: background 0.2s;
+}
+.knob::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--on-accent);
+  transition: transform 0.2s;
+}
+.row[aria-checked="true"] .knob { background: var(--accent); }
+.row[aria-checked="true"] .knob::after { transform: translateX(20px); }
+.seg-btn:focus-visible, .row:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+@keyframes wobble {
+  0% { rotate: 0deg; }
+  18% { rotate: -9deg; }
+  38% { rotate: 8deg; }
+  58% { rotate: -5deg; }
+  78% { rotate: 3deg; }
+  100% { rotate: 0deg; }
+}
+.pic.wobble { animation: wobble 0.9s ease-in-out; }
+.head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.head .btn { min-height: 44px; padding: 0 20px; }
+.opts { display: flex; flex-direction: column; gap: 16px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
+.thumb {
+  position: relative;
+  box-sizing: border-box;
+  max-width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 3px solid transparent;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg);
+  cursor: pointer;
+}
+.thumb img { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.thumb[aria-pressed="true"] { border-color: var(--accent); }
+.thumb .vc {
+  position: absolute; top: 4px; right: 4px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 800 14px/22px var(--f-body);
+  text-align: center;
+}
+.thumb:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+#sleep { position: fixed; inset: 0; z-index: 40; background: var(--black); touch-action: none; cursor: pointer; }
+
+#ask {
+  position: fixed;
+  z-index: 22;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  width: min(calc(100% - 32px), 360px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 18px 18px;
+  border-radius: 24px;
+  background: var(--surface);
+  color: var(--fg);
+  text-align: center;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+}
+#ask p { margin: 0; font: 600 20px/1.2 var(--f-display); }
+#ask #askQ { font-size: 42px; }
+#askBtns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+#askBtns .btn { min-height: 68px; font-size: 28px; }
+.actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.btn.rec { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pic.boing, #sheet { animation: none; }
+  .pic.spin, .pic.wobble { animation: calm 0.6s ease-in-out; }
+}
+</style>
+
+<main id="feed" aria-label="Photo scroll"></main>
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<button id="gate" type="button" aria-label="Parent menu. Hold for about a second and a half to open.">
+  <svg viewBox="0 0 52 52" aria-hidden="true">
+    <circle class="ring" cx="26" cy="26" r="24"></circle>
+    <rect x="18" y="25" width="16" height="12" rx="3" fill="currentColor"></rect>
+    <path d="M21 25v-3a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></path>
+  </svg>
+</button>
+
+<label id="addPill" for="picker" hidden>
+  <strong>Add your photos</strong>
+  <span>Showing sample shapes</span>
+</label>
+
+<div id="status" role="status" aria-live="polite" hidden></div>
+<div id="sleep" role="button" aria-label="Sleeping. Touch to wake." hidden></div>
+
+<div id="shade" hidden></div>
+<section id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+  <div class="head">
+    <h2 id="sheetTitle">Parent menu</h2>
+    <button id="done2" class="btn" type="button">Done</button>
+  </div>
+  <p id="count" class="tip"></p>
+  <label class="btn primary" for="picker">Add photos</label>
+  <button id="manage" class="btn" type="button" hidden>Choose photos to remove</button>
+  <div id="managePanel" class="field" hidden>
+    <p class="tip">Tap a photo to choose it. Then you can record its name (like "Grandma!") or remove it. Recordings stay on this phone.</p>
+    <div id="grid" class="grid"></div>
+    <div id="photoActions" class="actions" hidden>
+      <button id="recBtn" class="btn" type="button">Record a name</button>
+      <button id="playBtn" class="btn" type="button" hidden>Play name</button>
+      <button id="delVoiceBtn" class="btn" type="button" hidden>Delete name</button>
+      <button id="rmBtn" class="btn" type="button">Remove photo</button>
+    </div>
+    <p id="voiceNote" class="tip" hidden></p>
+  </div>
+  <div id="opts" class="opts"></div>
+  <button id="clear" class="btn" type="button" hidden>Remove all photos</button>
+  <button id="done" class="btn" type="button">Back to the scroll</button>
+  <p id="storeNote" class="tip" hidden>This browser is not keeping photos between visits, so you will need to add them again next time.</p>
+  <p class="tip">Your child can tap a photo for a reaction, double-tap to spin it, and hold a finger down for fireworks.</p>
+  <p id="ver" class="tip"></p>
+  <p class="tip">Open this menu by holding the lock circle in the top corner. To keep your child inside the app, turn on Guided Access in Settings under Accessibility, then triple-click the side button.</p>
+</section>
+
+<section id="ask" role="dialog" aria-modal="true" aria-labelledby="askQ" hidden>
+  <p>Grown-ups only. What is</p>
+  <p id="askQ"></p>
+  <div id="askBtns"></div>
+  <button id="askCancel" class="btn" type="button">Cancel</button>
+</section>
+
+<input id="picker" class="sr" type="file" accept="image/*" multiple>
+
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var feed = $('feed'), picker = $('picker'), sheet = $('sheet'), shade = $('shade');
+  var gate = $('gate'), pill = $('addPill'), statusEl = $('status'), countEl = $('count');
+  var clearBtn = $('clear'), doneBtn = $('done'), noteEl = $('storeNote');
+  var fxCv = $('fx'), sleepEl = $('sleep');
+  var manageBtn = $('manage'), managePanel = $('managePanel'), grid = $('grid'), optsEl = $('opts');
+  var photoActions = $('photoActions'), recBtn = $('recBtn'), playBtn = $('playBtn'), delVoiceBtn = $('delVoiceBtn'), rmBtn = $('rmBtn'), voiceNote = $('voiceNote');
+  var ask = $('ask'), askQ = $('askQ'), askBtns = $('askBtns'), askT = 0, askAns = 0;
+  var voiceEl = new Audio();
+
+  var VERSION = '2026-11-05a';
+  var cfg = { dir: 'v', auto: 'off', react: 'bounce', fx: 'streak', sound: 'quiet', sleep: '5', voice: 'tap', gate: 'math' };
+  try {
+    var saved = JSON.parse(localStorage.getItem('ls-cfg') || 'null');
+    if (saved) {
+      for (var k in cfg) { if (typeof saved[k] === 'string') cfg[k] = saved[k]; }
+    } else {
+      if (localStorage.getItem('ls-dir') === 'h') cfg.dir = 'h';
+      if (localStorage.getItem('ls-fx') === 'off') cfg.fx = 'off';
+    }
+  } catch (e) {}
+  var horiz = cfg.dir === 'h';
+  feed.classList.toggle('h', horiz);
+  var lastInput = performance.now(), autoHoldUntil = 0, sleeping = false, shownEl = null;
+
+  var items = [];       // what the feed shows: { url, c }
+  var records = [];     // saved photos: { blob, c }
+  var urls = [];        // object URLs to release
+  var demo = true;
+  var bag = [], lastIdx = -1;
+  var settled = 0;
+  var db = null, dbOK = true;
+
+  /* ---------- storage (best effort) ---------- */
+  function openDB() {
+    return new Promise(function (res, rej) {
+      try {
+        var r = indexedDB.open('little-scroll', 1);
+        r.onupgradeneeded = function () { r.result.createObjectStore('photos', { autoIncrement: true }); };
+        r.onsuccess = function () { res(r.result); };
+        r.onerror = function () { rej(r.error); };
+        r.onblocked = function () { rej(new Error('blocked')); };
+      } catch (e) { rej(e); }
+    });
+  }
+  function tx(mode, fn) {
+    return new Promise(function (res, rej) {
+      var t = db.transaction('photos', mode);
+      var req = fn(t.objectStore('photos'));
+      t.oncomplete = function () { res(req && req.result); };
+      t.onerror = function () { rej(t.error); };
+      t.onabort = function () { rej(t.error); };
+    });
+  }
+  function loadStored() {
+    return openDB().then(function (d) {
+      db = d;
+      return new Promise(function (res, rej) {
+        var out = [], t = db.transaction('photos', 'readonly');
+        var req = t.objectStore('photos').openCursor();
+        req.onsuccess = function () {
+          var c = req.result;
+          if (c) { out.push({ key: c.key, blob: c.value.blob, c: c.value.c, voice: c.value.voice || null, vtype: c.value.vtype || null }); c.continue(); }
+        };
+        t.oncomplete = function () { res(out); };
+        t.onerror = t.onabort = function () { rej(t.error); };
+      });
+    }).catch(function () { dbOK = false; return []; });
+  }
+  function persist(rec) {
+    if (!dbOK || !db) return Promise.resolve();
+    return tx('readwrite', function (s) { return s.add({ blob: rec.blob, c: rec.c }); })
+      .then(function (key) { rec.key = key; })
+      .catch(function () { dbOK = false; });
+  }
+  function unpersist(rec) {
+    if (!dbOK || !db || rec.key === undefined) return Promise.resolve();
+    return tx('readwrite', function (s) { return s.delete(rec.key); }).catch(function () {});
+  }
+  function saveRec(rec) {
+    if (!dbOK || !db || rec.key === undefined) return Promise.resolve();
+    return tx('readwrite', function (s) {
+      return s.put({ blob: rec.blob, c: rec.c, voice: rec.voice || null, vtype: rec.vtype || null }, rec.key);
+    }).catch(function () {});
+  }
+
+  /* ---------- photo import ---------- */
+  function shrink(file) {
+    var MAX = 1600;
+    var url = null;
+    var getSource = createImageBitmap
+      ? createImageBitmap(file, { imageOrientation: 'from-image' }).catch(function () { return null; })
+      : Promise.resolve(null);
+    return getSource.then(function (bmp) {
+      if (bmp) return { src: bmp, w: bmp.width, h: bmp.height, bmp: bmp };
+      url = URL.createObjectURL(file);
+      return new Promise(function (res, rej) {
+        var im = new Image();
+        im.onload = function () { res({ src: im, w: im.naturalWidth, h: im.naturalHeight }); };
+        im.onerror = rej;
+        im.src = url;
+      });
+    }).then(function (o) {
+      var k = Math.min(1, MAX / Math.max(o.w, o.h));
+      var cw = Math.max(1, Math.round(o.w * k)), ch = Math.max(1, Math.round(o.h * k));
+      var cv = document.createElement('canvas');
+      cv.width = cw; cv.height = ch;
+      cv.getContext('2d').drawImage(o.src, 0, 0, cw, ch);
+      var sm = document.createElement('canvas');
+      sm.width = 8; sm.height = 8;
+      var sg = sm.getContext('2d');
+      sg.drawImage(cv, 0, 0, 8, 8);
+      var d = sg.getImageData(0, 0, 8, 8).data, r = 0, g = 0, b = 0, n = d.length / 4;
+      for (var i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+      var c = 'rgb(' + Math.round(r / n) + ', ' + Math.round(g / n) + ', ' + Math.round(b / n) + ')';
+      return new Promise(function (res, rej) {
+        cv.toBlob(function (blob) {
+          if (o.bmp && o.bmp.close) o.bmp.close();
+          if (url) URL.revokeObjectURL(url);
+          cv.width = 0; cv.height = 0;
+          blob ? res({ blob: blob, c: c }) : rej(new Error('encode'));
+        }, 'image/jpeg', 0.86);
+      });
+    }).catch(function (e) {
+      if (url) URL.revokeObjectURL(url);
+      throw e;
+    });
+  }
+
+  function importFiles(files) {
+    var list = files.filter(function (f) { return !f.type || f.type.indexOf('image/') === 0; });
+    if (!list.length) return Promise.resolve();
+    var failed = 0, i = 0;
+    function step() {
+      if (i >= list.length) return Promise.resolve();
+      showStatus('Adding photos... ' + (i + 1) + ' of ' + list.length);
+      return shrink(list[i]).then(function (rec) {
+        records.push(rec);
+        return persist(rec);
+      }).catch(function () { failed++; }).then(function () {
+        i++;
+        return new Promise(function (r) { setTimeout(r, 0); });
+      }).then(step);
+    }
+    return step().then(function () {
+      var ok = list.length - failed;
+      showStatus(failed ? ('Added ' + ok + '. ' + failed + ' could not be read.')
+                        : ('Added ' + ok + (ok === 1 ? ' photo.' : ' photos.')), 2800);
+      if (ok > 0) {
+        useRecords();
+        try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+      }
+    });
+  }
+
+  /* ---------- sample shapes so the page works before any photos are added ---------- */
+  function drawPoly(g, pts, fill) {
+    g.fillStyle = fill; g.strokeStyle = fill; g.lineJoin = 'round'; g.lineWidth = 36;
+    g.beginPath();
+    pts.forEach(function (p, i) { i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); });
+    g.closePath(); g.fill(); g.stroke();
+  }
+  function ngon(cx, cy, r, n, rot) {
+    var out = [];
+    for (var i = 0; i < n; i++) { var a = rot + i * 2 * Math.PI / n; out.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); }
+    return out;
+  }
+  function drawShape(g, kind, cx, cy, r, fill, bg) {
+    if (kind === 'circle') { g.fillStyle = fill; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill(); }
+    else if (kind === 'moon') {
+      g.fillStyle = fill; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+      g.fillStyle = bg; g.beginPath(); g.arc(cx + r * 0.5, cy - r * 0.2, r * 0.82, 0, Math.PI * 2); g.fill();
+    }
+    else if (kind === 'square') {
+      var s = r * 1.7, x = cx - s / 2, y = cy - s / 2, rr = s * 0.2;
+      g.fillStyle = fill; g.beginPath(); g.moveTo(x + rr, y);
+      g.arcTo(x + s, y, x + s, y + s, rr); g.arcTo(x + s, y + s, x, y + s, rr);
+      g.arcTo(x, y + s, x, y, rr); g.arcTo(x, y, x + s, y, rr); g.fill();
+    }
+    else if (kind === 'heart') {
+      g.fillStyle = fill; g.beginPath(); g.moveTo(cx, cy + r * 0.9);
+      g.bezierCurveTo(cx + r * 1.5, cy + r * 0.1, cx + r * 0.8, cy - r * 1.05, cx, cy - r * 0.35);
+      g.bezierCurveTo(cx - r * 0.8, cy - r * 1.05, cx - r * 1.5, cy + r * 0.1, cx, cy + r * 0.9); g.fill();
+    }
+    else if (kind === 'star') {
+      var pts = [];
+      for (var i = 0; i < 10; i++) { var a = -Math.PI / 2 + i * Math.PI / 5, rad = i % 2 ? r * 0.48 : r; pts.push([cx + rad * Math.cos(a), cy + rad * Math.sin(a)]); }
+      drawPoly(g, pts, fill);
+    }
+    else if (kind === 'triangle') drawPoly(g, ngon(cx, cy + r * 0.1, r * 0.95, 3, -Math.PI / 2), fill);
+    else if (kind === 'hexagon') drawPoly(g, ngon(cx, cy, r * 0.9, 6, 0), fill);
+    else if (kind === 'diamond') drawPoly(g, [[cx, cy - r * 1.05], [cx + r * 0.75, cy], [cx, cy + r * 1.05], [cx - r * 0.75, cy]], fill);
+  }
+  var SAMPLE = [
+    ['circle', '#FFD23F', '#E8453A'], ['star', '#4FB5E8', '#FFE066'], ['heart', '#7ED6A5', '#FF6F61'],
+    ['triangle', '#B58CF0', '#FFD23F'], ['square', '#FF9F5A', '#2E5BFF'], ['moon', '#2E3A8C', '#FFE066'],
+    ['hexagon', '#FF8FB8', '#1F9E6E'], ['diamond', '#59C9C0', '#FF6B5E']
+  ];
+  function makeDemo() {
+    var out = [], newUrls = [], chain = Promise.resolve();
+    SAMPLE.forEach(function (sp, idx) {
+      chain = chain.then(function () {
+        var cv = document.createElement('canvas');
+        cv.width = 720; cv.height = 1280;
+        var g = cv.getContext('2d');
+        g.fillStyle = sp[1]; g.fillRect(0, 0, 720, 1280);
+        var seed = idx * 7919 + 13;
+        var rnd = function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+        g.fillStyle = 'rgba(255,255,255,0.5)';
+        for (var k = 0; k < 7; k++) {
+          var top = rnd() < 0.5;
+          g.beginPath();
+          g.arc(70 + rnd() * 580, (top ? 90 + rnd() * 190 : 990 + rnd() * 190), 16 + rnd() * 30, 0, Math.PI * 2);
+          g.fill();
+        }
+        drawShape(g, sp[0], 360, 620, 250, sp[2], sp[1]);
+        return new Promise(function (res) { cv.toBlob(res, 'image/png'); }).then(function (blob) {
+          var u = URL.createObjectURL(blob);
+          newUrls.push(u);
+          out.push({ url: u, c: sp[1] });
+        });
+      });
+    });
+    return chain.then(function () {
+      demo = true;
+      setItems(out, newUrls);
+      updateUI();
+    });
+  }
+  function useRecords() {
+    var newUrls = [];
+    var out = records.map(function (r) {
+      var u = URL.createObjectURL(r.blob);
+      newUrls.push(u);
+      return { url: u, c: r.c, voice: r.voice };
+    });
+    demo = false;
+    setItems(out, newUrls);
+    updateUI();
+  }
+  function setItems(newItems, newUrls) {
+    feed.textContent = '';
+    urls.forEach(function (u) { URL.revokeObjectURL(u); });
+    items.forEach(function (it) { if (it.vurl) URL.revokeObjectURL(it.vurl); });
+    urls = newUrls;
+    items = newItems;
+    rebuild();
+  }
+
+  /* ---------- the endless shuffled feed ---------- */
+  function shuffle(a) {
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function nextIdx() {
+    if (!bag.length) {
+      bag = shuffle(items.map(function (_, i) { return i; }));
+      if (items.length > 1 && bag[bag.length - 1] === lastIdx) {
+        var j = Math.floor(Math.random() * (bag.length - 1));
+        var t = bag[bag.length - 1]; bag[bag.length - 1] = bag[j]; bag[j] = t;
+      }
+    }
+    lastIdx = bag.pop();
+    return lastIdx;
+  }
+  function makeSlide(i) {
+    var s = document.createElement('section');
+    s.className = 'slide';
+    s.dataset.i = i;
+    s.style.setProperty('--c', items[i].c);
+    var im = new Image();
+    im.className = 'pic';
+    im.alt = '';
+    im.decoding = 'async';
+    im.draggable = false;
+    im.src = items[i].url;
+    s.appendChild(im);
+    return s;
+  }
+  function size() { return (horiz ? feed.clientWidth : feed.clientHeight) || (horiz ? window.innerWidth : window.innerHeight); }
+  function pos() { return horiz ? feed.scrollLeft : feed.scrollTop; }
+  function cur() { return Math.round(pos() / size()); }
+  function setPos(v) {
+    feed.style.scrollSnapType = 'none';
+    if (horiz) feed.scrollLeft = v; else feed.scrollTop = v;
+    void feed.offsetHeight;
+    feed.style.scrollSnapType = autoMoving ? 'none' : '';
+  }
+  function append() { feed.appendChild(makeSlide(nextIdx())); }
+  function prepend() {
+    var first = feed.firstElementChild;
+    var nb = first ? +first.dataset.i : -1;
+    var i = Math.floor(Math.random() * items.length);
+    if (items.length > 1 && i === nb) i = (i + 1 + Math.floor(Math.random() * (items.length - 1))) % items.length;
+    feed.insertBefore(makeSlide(i), first);
+    setPos(pos() + size());
+  }
+  function balance() {
+    if (!items.length || sleeping) return;
+    var c = cur();
+    while (c < 3) { prepend(); c++; }
+    while (feed.children.length - c < 6) append();
+    while (c > 6) { feed.removeChild(feed.firstElementChild); setPos(pos() - size()); c--; }
+    while (feed.children.length - c > 12) feed.removeChild(feed.lastElementChild);
+    settled = cur();
+    var el = feed.children[settled];
+    if (el !== shownEl) { if (shownEl && !autoMoving) sfx('tick'); shownEl = el; }
+  }
+  function rebuild() {
+    feed.textContent = '';
+    bag = []; lastIdx = -1; shownEl = null;
+    if (!items.length) return;
+    for (var k = 0; k < 7; k++) append();
+    requestAnimationFrame(function () { setPos(0); balance(); });
+  }
+
+  var idleT = 0;
+  feed.addEventListener('scroll', function () {
+    if (items.length && !sleeping && feed.children.length - cur() < 4) append();
+    clearTimeout(idleT);
+    idleT = setTimeout(balance, 160);
+  }, { passive: true });
+
+  var resizeT = 0;
+  window.addEventListener('resize', function () {
+    sizeFx();
+    clearTimeout(resizeT);
+    resizeT = setTimeout(function () { if (feed.children.length) setPos(settled * size()); }, 140);
+  });
+
+  /* ---------- sounds (made on the fly, no files) ---------- */
+  var actx = null;
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+  function tone(freq, t0, dur, vol, type, endFreq) {
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(freq, t0);
+    if (endFreq) o.frequency.exponentialRampToValueAtTime(endFreq, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(t0); o.stop(t0 + dur + 0.03);
+  }
+  function playSfx(kind) {
+    var v = cfg.sound === 'quiet' ? 0.07 : 0.2, t = actx.currentTime;
+    if (kind === 'pop') tone(620, t, 0.14, v, 'sine', 190);
+    else if (kind === 'chime') [784, 988, 1175, 1568].forEach(function (f, i) { tone(f, t + i * 0.16, 0.9, v * 0.8, 'sine'); });
+    else if (kind === 'tick') tone(330, t, 0.1, v * 0.6, 'triangle', 260);
+  }
+  function sfx(kind) {
+    if (cfg.sound === 'off') return;
+    try {
+      if (!actx) { var AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); }
+      if (!actx) return;
+      if (actx.state === 'running') playSfx(kind);
+      else actx.resume().then(function () { playSfx(kind); }).catch(function () {});
+    } catch (e) {}
+  }
+
+  /* ---------- touch: tap, double-tap, hold ---------- */
+  var TAP_MS = 280, MOVE_PX = 14, DBL_MS = 320, DBL_PX = 48;
+  var press = null, lastTap = { t: 0, x: 0, y: 0 }, pt = { x: 0, y: 0 };
+
+  function touched() { lastInput = performance.now(); autoHoldUntil = lastInput + 5000; }
+  ['pointerdown', 'pointerup', 'pointercancel'].forEach(function (t) { document.addEventListener(t, touched, true); });
+
+  function replay(im, cls) {
+    im.classList.remove('boing', 'spin', 'wobble');
+    void im.offsetWidth;
+    im.classList.add(cls);
+  }
+  function react(im, x, y) {
+    var m = cfg.react;
+    if (m === 'off') return;
+    if (m === 'mix') m = ['bounce', 'wobble', 'hearts', 'confetti'][(Math.random() * 4) | 0];
+    replay(im, m === 'wobble' ? 'wobble' : 'boing');
+    if (m === 'hearts') emit('heart', x, y, 9);
+    else if (m === 'confetti') emit('confetti', x, y, 34);
+    sfx('pop');
+  }
+  function speak(im) {
+    if (cfg.voice !== 'tap') return;
+    var sl = im.parentNode, it = sl && items[+sl.dataset.i];
+    if (!it || !it.voice) return;
+    try {
+      if (!it.vurl) it.vurl = URL.createObjectURL(it.voice);
+      voiceEl.src = it.vurl;
+      var pr = voiceEl.play();
+      if (pr && pr.catch) pr.catch(function () {});
+    } catch (e) {}
+  }
+  function endPress() {
+    if (press) clearTimeout(press.timer);
+    press = null;
+    stopFx();
+  }
+  feed.addEventListener('pointerdown', function (e) {
+    if (!e.isPrimary) return;
+    endPress();
+    var p = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), moved: false, holding: false, timer: 0 };
+    press = p;
+    pt.x = e.clientX; pt.y = e.clientY;
+    p.timer = setTimeout(function () {
+      if (press !== p || p.moved) return;
+      p.holding = true;
+      if (cfg.fx !== 'off') startFx();
+    }, TAP_MS);
+  });
+  feed.addEventListener('pointermove', function (e) {
+    if (!press || e.pointerId !== press.id) return;
+    pt.x = e.clientX; pt.y = e.clientY;
+    if (!press.holding && !press.moved && Math.hypot(e.clientX - press.x, e.clientY - press.y) > MOVE_PX) {
+      press.moved = true;
+      clearTimeout(press.timer);
+    }
+  });
+  feed.addEventListener('pointerup', function (e) {
+    if (!press || e.pointerId !== press.id) return;
+    var p = press, now = performance.now();
+    endPress();
+    if (p.holding || p.moved || now - p.t > TAP_MS) return;
+    var s = e.target.closest ? e.target.closest('.slide') : null;
+    var im = s && s.firstElementChild;
+    if (!im) return;
+    if (now - lastTap.t < DBL_MS && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < DBL_PX) {
+      lastTap.t = 0;
+      replay(im, 'spin');
+      sfx('chime');
+    } else {
+      lastTap = { t: now, x: e.clientX, y: e.clientY };
+      react(im, e.clientX, e.clientY);
+      speak(im);
+    }
+  });
+  feed.addEventListener('pointercancel', function (e) { if (press && e.pointerId === press.id) endPress(); });
+  feed.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  feed.addEventListener('animationend', function (e) { e.target.classList.remove('boing', 'spin', 'wobble'); });
+
+  /* ---------- sparks: fireworks, hearts, confetti ---------- */
+  var fxCtx = fxCv.getContext('2d');
+  var sparks = [], fxOn = false, fxRaf = 0, fxLast = 0, fxAcc = 0, fxDpr = 1;
+  var HUES = { heart: [350, 338, 2, 325], bubble: [185, 200, 170, 215], any: [46, 8, 188, 330, 128, 268, 22] };
+
+  function sizeFx() {
+    fxDpr = Math.min(window.devicePixelRatio || 1, 2);
+    fxCv.width = Math.round((fxCv.clientWidth || window.innerWidth) * fxDpr);
+    fxCv.height = Math.round((fxCv.clientHeight || window.innerHeight) * fxDpr);
+  }
+  function emit(kind, x, y, n) {
+    var set = HUES[kind] || HUES.any;
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * Math.PI * 2, c = Math.cos(a), sn = Math.sin(a), sp, life, p;
+      if (kind === 'streak') { sp = 140 + Math.random() * 320; life = 0.6 + Math.random() * 0.7; p = { vx: c * sp, vy: sn * sp, g: 220, d: 0.1, w: 2 + Math.random() * 2 }; }
+      else if (kind === 'sparkle') { sp = 80 + Math.random() * 240; life = 0.8 + Math.random() * 0.8; p = { vx: c * sp, vy: sn * sp, g: 60, d: 0.15, w: 7 + Math.random() * 9 }; }
+      else if (kind === 'bubble') { sp = 40 + Math.random() * 200; life = 1.2 + Math.random() * 1.2; p = { vx: c * sp, vy: sn * sp - 60, g: -90, d: 0.25, w: 10 + Math.random() * 20 }; }
+      else if (kind === 'star') { sp = 120 + Math.random() * 300; life = 0.9 + Math.random(); p = { vx: c * sp, vy: sn * sp, g: 180, d: 0.12, w: 9 + Math.random() * 11 }; }
+      else if (kind === 'heart') { sp = 60 + Math.random() * 160; life = 1.1 + Math.random() * 0.9; p = { vx: c * sp * 0.7, vy: -Math.abs(sn * sp) - 80, g: -40, d: 0.3, w: 16 + Math.random() * 16 }; }
+      else { sp = 200 + Math.random() * 380; life = 1.3 + Math.random() * 0.9; p = { vx: c * sp, vy: sn * sp - 220, g: 520, d: 0.08, w: 7 + Math.random() * 6 }; }
+      p.k = kind; p.x = x; p.y = y; p.life = life; p.max = life;
+      p.hue = set[(Math.random() * set.length) | 0];
+      p.rot = kind === 'heart' ? (Math.random() - 0.5) * 0.5 : Math.random() * 6.28;
+      p.vr = kind === 'heart' ? Math.random() - 0.5 : (Math.random() - 0.5) * (kind === 'confetti' ? 14 : 4);
+      sparks.push(p);
+    }
+    if (sparks.length > 450) sparks.splice(0, sparks.length - 450);
+    ensureFx();
+  }
+  function halo(g) { g.strokeStyle = 'rgba(20, 20, 40, 0.45)'; g.lineWidth = 3; g.lineJoin = 'round'; g.stroke(); }
+  function starPath(g, r, pts) {
+    g.beginPath();
+    for (var i = 0; i < pts * 2; i++) {
+      var a = -Math.PI / 2 + i * Math.PI / pts, rad = i % 2 ? r * (pts === 4 ? 0.2 : 0.46) : r;
+      if (i) g.lineTo(rad * Math.cos(a), rad * Math.sin(a)); else g.moveTo(rad * Math.cos(a), rad * Math.sin(a));
+    }
+    g.closePath();
+  }
+  function drawSpark(g, p, al) {
+    var col = 'hsl(' + p.hue + ', 100%, 62%)';
+    g.globalAlpha = al;
+    if (p.k === 'streak') {
+      var x0 = p.x - p.vx * 0.04, y0 = p.y - p.vy * 0.04;
+      g.strokeStyle = 'rgba(20, 20, 40, 0.35)'; g.lineWidth = p.w + 2.5;
+      g.beginPath(); g.moveTo(x0, y0); g.lineTo(p.x, p.y); g.stroke();
+      g.strokeStyle = col; g.lineWidth = p.w;
+      g.beginPath(); g.moveTo(x0, y0); g.lineTo(p.x, p.y); g.stroke();
+      return;
+    }
+    g.save();
+    g.translate(p.x, p.y);
+    if (p.k === 'bubble') {
+      g.fillStyle = 'hsla(' + p.hue + ', 100%, 80%, 0.28)';
+      g.beginPath(); g.arc(0, 0, p.w, 0, 6.2832); g.fill();
+      g.strokeStyle = 'rgba(255, 255, 255, 0.95)'; g.lineWidth = 2.5; g.stroke();
+      g.beginPath(); g.arc(0, 0, p.w * 0.62, 3.6, 4.6); g.stroke();
+    } else {
+      g.rotate(p.rot);
+      g.fillStyle = col;
+      if (p.k === 'sparkle') {
+        var tw = 0.65 + 0.35 * Math.sin(p.life * 28 + p.hue);
+        g.scale(tw, tw);
+        g.fillStyle = 'hsl(' + p.hue + ', 100%, 75%)';
+        starPath(g, p.w, 4); g.fill(); halo(g);
+      } else if (p.k === 'star') {
+        starPath(g, p.w, 5); g.fill(); halo(g);
+      } else if (p.k === 'heart') {
+        var s = p.w * 0.45;
+        g.beginPath(); g.moveTo(0, s * 0.9);
+        g.bezierCurveTo(s * 1.5, s * 0.1, s * 0.8, -s * 1.05, 0, -s * 0.35);
+        g.bezierCurveTo(-s * 0.8, -s * 1.05, -s * 1.5, s * 0.1, 0, s * 0.9);
+        g.fill(); halo(g);
+      } else {
+        var fl = 0.25 + 0.75 * Math.abs(Math.cos(p.life * 8 + p.hue));
+        g.fillRect(-p.w / 2, -p.w * 0.3 * fl, p.w, p.w * 0.6 * fl);
+      }
+    }
+    g.restore();
+  }
+  function fxFrame(t) {
+    var dt = Math.min(0.05, (t - fxLast) / 1000) || 0.016;
+    fxLast = t;
+    if (fxOn) {
+      fxAcc += dt;
+      while (fxAcc >= 0.05) { fxAcc -= 0.05; emit(cfg.fx, pt.x, pt.y, cfg.fx === 'bubble' ? 3 : 6); }
+    }
+    fxCtx.setTransform(1, 0, 0, 1, 0, 0);
+    fxCtx.clearRect(0, 0, fxCv.width, fxCv.height);
+    fxCtx.setTransform(fxDpr, 0, 0, fxDpr, 0, 0);
+    for (var i = sparks.length - 1; i >= 0; i--) {
+      var p = sparks[i];
+      p.life -= dt;
+      if (p.life <= 0) { sparks.splice(i, 1); continue; }
+      var dr = Math.pow(p.d, dt);
+      p.vx *= dr;
+      p.vy = p.vy * dr + p.g * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.rot += p.vr * dt;
+      drawSpark(fxCtx, p, Math.min(1, (p.life / p.max) * 1.5));
+    }
+    fxCtx.globalAlpha = 1;
+    fxRaf = (fxOn || sparks.length) ? requestAnimationFrame(fxFrame) : 0;
+  }
+  function ensureFx() { if (!fxRaf) { fxLast = performance.now(); fxRaf = requestAnimationFrame(fxFrame); } }
+  function startFx() { fxOn = true; fxAcc = 0.05; ensureFx(); }
+  function stopFx() { fxOn = false; }
+  sizeFx();
+
+  /* ---------- auto-scroll ---------- */
+  var SPEEDS = { slow: 60, med: 130, fast: 240 };
+  var autoRaf = 0, autoAcc = 0, autoLast = 0, autoSet = -1, autoBal = 0, autoMoving = false;
+  function autoOn() { return !!SPEEDS[cfg.auto] && !sleeping; }
+  function autoFrame(t) {
+    autoRaf = 0;
+    if (!autoOn()) { autoMoving = false; feed.style.scrollSnapType = ''; return; }
+    var dt = Math.min(0.05, (t - autoLast) / 1000) || 0;
+    autoLast = t;
+    var busy = !sheet.hidden || !ask.hidden || !!press || t < autoHoldUntil || !items.length;
+    if (busy) {
+      if (autoMoving) { autoMoving = false; feed.style.scrollSnapType = ''; }
+    } else {
+      if (!autoMoving) { autoMoving = true; feed.style.scrollSnapType = 'none'; autoAcc = pos(); autoSet = -1; }
+      var p = pos();
+      if (autoSet >= 0 && Math.abs(p - autoSet) > 2) autoAcc = p;
+      autoAcc += SPEEDS[cfg.auto] * dt;
+      autoSet = Math.round(autoAcc);
+      if (horiz) feed.scrollLeft = autoSet; else feed.scrollTop = autoSet;
+      if (t - autoBal > 1000) { autoBal = t; balance(); }
+    }
+    autoRaf = requestAnimationFrame(autoFrame);
+  }
+  function syncAuto() {
+    if (autoOn() && !autoRaf) { autoLast = performance.now(); autoRaf = requestAnimationFrame(autoFrame); }
+  }
+
+  /* ---------- sleep after no touching ---------- */
+  var sleepT = 0;
+  function sleepMs() { var m = parseFloat(cfg.sleep); return m > 0 ? m * 60000 : 0; }
+  function armSleep() {
+    clearTimeout(sleepT);
+    var ms = sleepMs();
+    if (!ms || sleeping) return;
+    var left = ms - (performance.now() - lastInput);
+    sleepT = setTimeout(function () {
+      if (!sheet.hidden || !ask.hidden) lastInput = performance.now();
+      if (performance.now() - lastInput >= ms - 50) goToSleep(); else armSleep();
+    }, Math.max(left, 250));
+  }
+  function goToSleep() {
+    sleeping = true;
+    endPress();
+    sparks.length = 0;
+    fxCtx.setTransform(1, 0, 0, 1, 0, 0);
+    fxCtx.clearRect(0, 0, fxCv.width, fxCv.height);
+    sleepEl.hidden = false;
+    feed.textContent = '';
+    feed.style.scrollSnapType = '';
+    try { if (wl) wl.release(); } catch (e) {}
+    wl = null;
+    try { if (actx && actx.suspend) actx.suspend(); } catch (e) {}
+  }
+  function wake() {
+    sleeping = false;
+    sleepEl.hidden = true;
+    lastInput = performance.now();
+    rebuild();
+    keepAwake();
+    syncAuto();
+    armSleep();
+  }
+  sleepEl.addEventListener('pointerdown', function (e) { e.preventDefault(); wake(); });
+
+  /* ---------- menu selectors ---------- */
+  var OPTS = [
+    { key: 'dir', label: 'Scroll direction', vals: [['v', 'Up and down'], ['h', 'Side to side']] },
+    { key: 'auto', label: 'Auto-scroll', vals: [['off', 'Off'], ['slow', 'Slow'], ['med', 'Medium'], ['fast', 'Fast']],
+      tip: 'Photos drift by on their own. Touching the screen pauses it for a few seconds.' },
+    { key: 'react', label: 'When a photo is tapped', vals: [['off', 'Nothing'], ['bounce', 'Bounce'], ['wobble', 'Wobble'], ['hearts', 'Hearts'], ['confetti', 'Confetti'], ['mix', 'Surprise me']] },
+    { key: 'fx', label: 'Fireworks when held', vals: [['off', 'Off'], ['streak', 'Streaks'], ['sparkle', 'Sparkles'], ['bubble', 'Bubbles'], ['star', 'Stars']] },
+    { key: 'sound', label: 'Sounds', vals: [['off', 'Off'], ['quiet', 'Quiet'], ['normal', 'Normal']],
+      tip: 'A pop on tap, a chime on spin, and a soft tick when the photo changes. The ringer switch can mute it on some phones.' },
+    { key: 'voice', label: 'Recorded names', vals: [['off', 'Off'], ['tap', 'Play on tap']],
+      tip: 'Plays the name you recorded for a photo when your child taps it. Record names under "Choose photos to remove".' },
+    { key: 'sleep', label: 'Go dark after no touching', vals: [['0', 'Never'], ['2', '2 min'], ['5', '5 min'], ['10', '10 min']],
+      tip: 'The screen turns fully black and the app stops working so the battery lasts. A touch wakes it. With Never, the screen stays on until the phone locks it.' },
+    { key: 'gate', label: 'Opening this menu', vals: [['hold', 'Hold only'], ['math', 'Hold, then a question']],
+      tip: 'The question is a simple sum that only grown-ups will answer.' }
+  ];
+  OPTS.forEach(function (o) {
+    var f = document.createElement('div'); f.className = 'field';
+    var lab = document.createElement('span'); lab.className = 'label'; lab.id = 'lab-' + o.key; lab.textContent = o.label;
+    var seg = document.createElement('div'); seg.className = 'seg'; seg.setAttribute('role', 'group'); seg.setAttribute('aria-labelledby', lab.id);
+    o.vals.forEach(function (v) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'seg-btn'; b.textContent = v[1];
+      b.dataset.key = o.key; b.dataset.val = v[0];
+      seg.appendChild(b);
+    });
+    f.appendChild(lab); f.appendChild(seg);
+    if (o.tip) { var tp = document.createElement('p'); tp.className = 'tip'; tp.textContent = o.tip; f.appendChild(tp); }
+    optsEl.appendChild(f);
+  });
+  optsEl.addEventListener('click', function (e) {
+    var b = e.target.closest('.seg-btn');
+    if (b) setOpt(b.dataset.key, b.dataset.val);
+  });
+  function setOpt(k, v) {
+    if (cfg[k] === v) return;
+    cfg[k] = v;
+    try { localStorage.setItem('ls-cfg', JSON.stringify(cfg)); } catch (e) {}
+    if (k === 'dir') { horiz = v === 'h'; feed.classList.toggle('h', horiz); rebuild(); }
+    else if (k === 'fx' && v === 'off') stopFx();
+    else if (k === 'auto') syncAuto();
+    else if (k === 'sleep') { lastInput = performance.now(); armSleep(); }
+    else if (k === 'sound' && v !== 'off') sfx('pop');
+    updateUI();
+  }
+
+  /* ---------- remove single photos ---------- */
+  var thumbUrls = [], thumbRun = 0, picked = -1, dirty = false;
+  function thumbOf(blob) {
+    return createImageBitmap(blob).then(function (bmp) {
+      var cv = document.createElement('canvas');
+      cv.width = cv.height = 160;
+      var g = cv.getContext('2d'), k = Math.max(160 / bmp.width, 160 / bmp.height);
+      var w = bmp.width * k, h = bmp.height * k;
+      g.drawImage(bmp, (160 - w) / 2, (160 - h) / 2, w, h);
+      if (bmp.close) bmp.close();
+      return new Promise(function (res) { cv.toBlob(res, 'image/jpeg', 0.7); });
+    });
+  }
+  function dropThumbs() {
+    thumbRun++;
+    thumbUrls.forEach(function (u) { URL.revokeObjectURL(u); });
+    thumbUrls = [];
+    grid.textContent = '';
+    picked = -1;
+  }
+  function openManage() {
+    managePanel.hidden = false;
+    updateUI();
+    dropThumbs();
+    var run = thumbRun;
+    var imgs = [];
+    records.forEach(function (rec, i) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'thumb'; b.dataset.i = i;
+      b.setAttribute('aria-pressed', 'false');
+      b.setAttribute('aria-label', 'Photo ' + (i + 1));
+      b.style.background = rec.c;
+      var im = new Image(); im.alt = ''; b.appendChild(im); imgs.push(im);
+      grid.appendChild(b);
+    });
+    markVoiceBadges();
+    refreshActions();
+    var n = 0;
+    (function next() {
+      if (run !== thumbRun || n >= records.length) return;
+      var idx = n++;
+      thumbOf(records[idx].blob).then(function (tb) {
+        if (run !== thumbRun) return;
+        var u = URL.createObjectURL(tb);
+        thumbUrls.push(u);
+        imgs[idx].src = u;
+      }).catch(function () {}).then(next);
+    })();
+  }
+  function closeManage() {
+    stopRec();
+    setVoiceNote('');
+    photoActions.hidden = true;
+    managePanel.hidden = true;
+    dropThumbs();
+    updateUI();
+  }
+  var recState = null, rmArmed = false, rmT = 0, prevPlay = null;
+  function setVoiceNote(t) { voiceNote.textContent = t || ''; voiceNote.hidden = !t; }
+  function setSession(type) { try { if (navigator.audioSession) navigator.audioSession.type = type; } catch (e) {} }
+  function resetRm() { rmArmed = false; clearTimeout(rmT); rmBtn.textContent = 'Remove photo'; }
+  function refreshActions() {
+    var rec = picked >= 0 ? records[picked] : null;
+    photoActions.hidden = !rec;
+    if (!rec) return;
+    var on = !!recState;
+    recBtn.textContent = on ? 'Stop recording' : (rec.voice ? 'Record again' : 'Record a name');
+    recBtn.classList.toggle('rec', on);
+    playBtn.hidden = !rec.voice || on;
+    delVoiceBtn.hidden = !rec.voice || on;
+    rmBtn.hidden = on;
+  }
+  function markVoiceBadges() {
+    grid.querySelectorAll('.thumb').forEach(function (t, j) {
+      var has = !!(records[j] && records[j].voice), v = t.querySelector('.vc');
+      if (has && !v) { v = document.createElement('span'); v.className = 'vc'; v.textContent = '♪'; t.appendChild(v); }
+      else if (!has && v) v.remove();
+    });
+  }
+  grid.addEventListener('click', function (e) {
+    var b = e.target.closest('.thumb');
+    if (!b || recState) return;
+    var i = +b.dataset.i;
+    picked = picked === i ? -1 : i;
+    grid.querySelectorAll('.thumb').forEach(function (t) { t.setAttribute('aria-pressed', String(+t.dataset.i === picked)); });
+    resetRm(); setVoiceNote(''); refreshActions();
+  });
+  rmBtn.addEventListener('click', function () {
+    var rec = records[picked];
+    if (!rec) return;
+    if (!rmArmed) { rmArmed = true; rmBtn.textContent = 'Tap again to remove'; rmT = setTimeout(resetRm, 4000); return; }
+    resetRm();
+    var b = grid.querySelector('.thumb[data-i="' + picked + '"]');
+    records.splice(picked, 1);
+    picked = -1;
+    dirty = true;
+    if (b) b.remove();
+    grid.querySelectorAll('.thumb').forEach(function (t, j) { t.dataset.i = j; });
+    unpersist(rec);
+    refreshActions();
+    if (!records.length) closeManage(); else updateUI();
+  });
+  function stopRec() { if (recState && recState.mr.state !== 'inactive') recState.mr.stop(); }
+  function finishRec(st) {
+    clearTimeout(st.timer);
+    st.stream.getTracks().forEach(function (t) { t.stop(); });
+    if (recState === st) recState = null;
+    setSession('playback');
+    var blob = new Blob(st.chunks, { type: st.mr.mimeType || 'audio/mp4' });
+    if (blob.size > 0) {
+      st.rec.voice = blob; st.rec.vtype = blob.type;
+      dirty = true;
+      saveRec(st.rec);
+      setVoiceNote('Saved.');
+    } else setVoiceNote('Nothing was recorded. Try again.');
+    markVoiceBadges(); refreshActions();
+  }
+  recBtn.addEventListener('click', function () {
+    if (recState) { stopRec(); return; }
+    var rec = records[picked];
+    if (!rec) return;
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder)) {
+      setVoiceNote('Recording is not available here. It works in the installed copy of the app.');
+      return;
+    }
+    setVoiceNote('');
+    setSession('play-and-record');
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      var types = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'], mt = '';
+      for (var k = 0; k < types.length; k++) { if (MediaRecorder.isTypeSupported(types[k])) { mt = types[k]; break; } }
+      var mr = mt ? new MediaRecorder(stream, { mimeType: mt }) : new MediaRecorder(stream);
+      var st = { rec: rec, mr: mr, chunks: [], stream: stream, timer: 0 };
+      mr.ondataavailable = function (ev) { if (ev.data && ev.data.size) st.chunks.push(ev.data); };
+      mr.onstop = function () { finishRec(st); };
+      recState = st;
+      mr.start();
+      st.timer = setTimeout(stopRec, 8000);
+      refreshActions();
+      setVoiceNote('Recording. Say the name, then tap Stop. It stops by itself after 8 seconds.');
+    }).catch(function () {
+      setSession('playback');
+      setVoiceNote('The microphone is blocked. Allow it for this app in the iPhone Settings, then try again.');
+    });
+  });
+  playBtn.addEventListener('click', function () {
+    var rec = records[picked];
+    if (!rec || !rec.voice) return;
+    if (prevPlay) URL.revokeObjectURL(prevPlay);
+    prevPlay = URL.createObjectURL(rec.voice);
+    voiceEl.src = prevPlay;
+    var pr = voiceEl.play();
+    if (pr && pr.catch) pr.catch(function () {});
+  });
+  delVoiceBtn.addEventListener('click', function () {
+    var rec = records[picked];
+    if (!rec) return;
+    rec.voice = null; rec.vtype = null;
+    dirty = true;
+    saveRec(rec);
+    markVoiceBadges(); refreshActions();
+    setVoiceNote('Name removed.');
+  });
+
+  /* ---------- parent gate and sheet ---------- */
+  var holdT = 0;
+  function endHold() { clearTimeout(holdT); gate.classList.remove('holding'); }
+  gate.addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    gate.classList.add('holding');
+    clearTimeout(holdT);
+    holdT = setTimeout(function () { gate.classList.remove('holding'); gateOpen(); }, 1400);
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (t) { gate.addEventListener(t, endHold); });
+  gate.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  gate.addEventListener('keydown', function (e) { if (e.key === 'Enter') gateOpen(); });
+
+  function openSheet() { updateUI(); sheet.hidden = false; shade.hidden = false; }
+  function gateOpen() {
+    if (cfg.gate === 'hold') { openSheet(); return; }
+    askQuestion();
+  }
+  function askQuestion() {
+    var a = 3 + ((Math.random() * 7) | 0), b = 3 + ((Math.random() * 7) | 0);
+    askAns = a + b;
+    var opts = [askAns];
+    while (opts.length < 4) {
+      var w = askAns + ((Math.random() * 9) | 0) - 4;
+      if (w > 1 && opts.indexOf(w) < 0) opts.push(w);
+    }
+    shuffle(opts);
+    askQ.textContent = a + ' + ' + b + ' = ?';
+    askBtns.textContent = '';
+    opts.forEach(function (n) {
+      var bt = document.createElement('button');
+      bt.type = 'button'; bt.className = 'btn'; bt.textContent = String(n); bt.dataset.n = n;
+      askBtns.appendChild(bt);
+    });
+    ask.hidden = false; shade.hidden = false;
+    clearTimeout(askT);
+    askT = setTimeout(closeAsk, 20000);
+  }
+  function closeAsk() {
+    clearTimeout(askT);
+    ask.hidden = true;
+    if (sheet.hidden) shade.hidden = true;
+  }
+  askBtns.addEventListener('click', function (e) {
+    var bt = e.target.closest('.btn');
+    if (!bt) return;
+    if (+bt.dataset.n === askAns) { closeAsk(); openSheet(); } else askQuestion();
+  });
+  $('askCancel').addEventListener('click', closeAsk);
+  function closeSheet() {
+    sheet.hidden = true; shade.hidden = true; resetClear();
+    closeAsk();
+    closeManage();
+    if (dirty) { dirty = false; if (records.length) useRecords(); else makeDemo(); }
+  }
+  shade.addEventListener('click', closeSheet);
+  doneBtn.addEventListener('click', closeSheet);
+
+  $('done2').addEventListener('click', closeSheet);
+  manageBtn.addEventListener('click', openManage);
+
+  var armed = false, armT = 0;
+  function resetClear() { armed = false; clearTimeout(armT); clearBtn.textContent = 'Remove all photos'; }
+  clearBtn.addEventListener('click', function () {
+    if (!armed) {
+      armed = true;
+      clearBtn.textContent = 'Tap again to remove all photos';
+      armT = setTimeout(resetClear, 4000);
+      return;
+    }
+    resetClear();
+    records = [];
+    var wipe = (dbOK && db) ? tx('readwrite', function (s) { return s.clear(); }).catch(function () {}) : Promise.resolve();
+    wipe.then(function () { closeSheet(); makeDemo(); });
+  });
+
+  picker.addEventListener('change', function () {
+    var files = Array.prototype.slice.call(picker.files || []);
+    picker.value = '';
+    closeSheet();
+    importFiles(files);
+  });
+
+  function updateUI() {
+    pill.hidden = !demo;
+    clearBtn.hidden = demo;
+    noteEl.hidden = dbOK;
+    $('ver').textContent = 'Version ' + VERSION;
+    optsEl.querySelectorAll('.seg-btn').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(cfg[b.dataset.key] === b.dataset.val));
+    });
+    manageBtn.hidden = demo || !records.length || !managePanel.hidden;
+    countEl.textContent = demo ? 'No photos added yet. The scroll is showing sample shapes.'
+      : records.length + (records.length === 1 ? ' photo is' : ' photos are') + ' in the scroll, shuffled forever.';
+  }
+  var stT = 0;
+  function showStatus(t, ms) {
+    statusEl.textContent = t;
+    statusEl.hidden = false;
+    clearTimeout(stT);
+    if (ms) stT = setTimeout(function () { statusEl.hidden = true; }, ms);
+  }
+
+  /* ---------- small extras ---------- */
+  var wl = null;
+  function keepAwake() {
+    try {
+      if ('wakeLock' in navigator && document.visibilityState === 'visible' && !(wl && !wl.released) && !sleeping) {
+        navigator.wakeLock.request('screen').then(function (l) { wl = l; }).catch(function () {});
+      }
+    } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', keepAwake);
+  feed.addEventListener('touchstart', keepAwake, { passive: true });
+  keepAwake();
+
+  try {
+    if (document.querySelector('link[rel="apple-touch-icon"]')) throw 0;
+    var ic = document.createElement('canvas');
+    ic.width = ic.height = 180;
+    var ig = ic.getContext('2d');
+    ig.fillStyle = '#4FB5E8'; ig.fillRect(0, 0, 180, 180);
+    ig.fillStyle = '#FFD23F'; ig.beginPath(); ig.arc(90, 90, 54, 0, Math.PI * 2); ig.fill();
+    ig.fillStyle = '#E8453A'; ig.beginPath(); ig.arc(122, 62, 22, 0, Math.PI * 2); ig.fill();
+    var lk = document.createElement('link');
+    lk.rel = 'apple-touch-icon';
+    lk.href = ic.toDataURL('image/png');
+    document.head.appendChild(lk);
+  } catch (e) {}
+
+  /* ---------- start ---------- */
+  var timeout = new Promise(function (r) { setTimeout(function () { r(null); }, 2500); });
+  Promise.race([loadStored(), timeout]).then(function (stored) {
+    if (stored === null) dbOK = false;
+    if (stored && stored.length) { records = stored; useRecords(); }
+    else makeDemo();
+  }).catch(function () { dbOK = false; makeDemo(); });
+  syncAuto();
+  armSleep();
+})();
+</script>
