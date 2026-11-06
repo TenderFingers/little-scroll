@@ -476,7 +476,7 @@ body {
   var ask = $('ask'), askQ = $('askQ'), askBtns = $('askBtns'), askT = 0, askAns = 0;
   var voiceEl = new Audio();
 
-  var VERSION = '2026-11-06a';
+  var VERSION = '2026-11-06b';
   var cfg = { dir: 'v', auto: 'off', react: 'bounce', fx: 'streak', sound: 'quiet', sleep: '5', voice: 'tap', gate: 'math' };
   try {
     var saved = JSON.parse(localStorage.getItem('ls-cfg') || 'null');
@@ -498,6 +498,7 @@ body {
   var bag = [], lastIdx = -1;
   var settled = 0;
   var db = null, dbOK = true;
+  var ready = Promise.resolve();  // resolves once the saved photos have loaded
 
   /* ---------- storage (best effort) ---------- */
   function openDB() {
@@ -1361,16 +1362,17 @@ body {
       return;
     }
     resetClear();
-    records = [];
-    var wipe = (dbOK && db) ? tx('readwrite', function (s) { return s.clear(); }).catch(function () {}) : Promise.resolve();
-    wipe.then(function () { closeSheet(); makeDemo(); });
+    var wipe = ready.then(function () {
+      return (dbOK && db) ? tx('readwrite', function (s) { return s.clear(); }).catch(function () {}) : null;
+    });
+    wipe.then(function () { records = []; closeSheet(); makeDemo(); });
   });
 
   picker.addEventListener('change', function () {
     var files = Array.prototype.slice.call(picker.files || []);
     picker.value = '';
     closeSheet();
-    importFiles(files);
+    ready.then(function () { return importFiles(files); });
   });
 
   function updateUI() {
@@ -1421,12 +1423,11 @@ body {
   } catch (e) {}
 
   /* ---------- start ---------- */
-  var timeout = new Promise(function (r) { setTimeout(function () { r(null); }, 2500); });
-  Promise.race([loadStored(), timeout]).then(function (stored) {
-    if (stored === null) dbOK = false;
+  // Wait for the database however long it takes; demo mode only if it genuinely fails (loadStored sets dbOK = false).
+  ready = loadStored().then(function (stored) {
     if (stored && stored.length) { records = stored; useRecords(); }
-    else makeDemo();
-  }).catch(function () { dbOK = false; makeDemo(); });
+    else return makeDemo();
+  }).catch(function () { dbOK = false; return makeDemo(); });
   syncAuto();
   armSleep();
 })();
