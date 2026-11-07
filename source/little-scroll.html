@@ -221,6 +221,36 @@ body {
 #splash.out { opacity: 0; pointer-events: none; }
 #splash video { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 @keyframes splashGone { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+#card {
+  position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 9vh); z-index: 12;
+  display: flex; justify-content: center; padding: 0 12px; box-sizing: border-box;
+  pointer-events: none; opacity: 0; transform: translateY(16px) scale(0.96);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+#card.on { opacity: 1; transform: none; }
+#cardTxt {
+  font: 800 clamp(44px, 15vw, 104px)/1.05 ui-rounded, 'SF Pro Rounded', 'Arial Rounded MT Bold', 'Chalkboard SE', 'Marker Felt', 'Comic Sans MS', system-ui, sans-serif;
+  letter-spacing: 0.02em; color: #33336B; background: rgba(255, 255, 255, 0.93);
+  padding: 0.1em 0.5em 0.16em; border-radius: 0.5em; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+  max-width: 92vw; overflow-wrap: anywhere; text-align: center;
+}
+#cardTxt:empty { display: none; }
+#nar {
+  position: fixed; inset: 0; z-index: 36; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  box-sizing: border-box; padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px 28px;
+  background: var(--bg); color: var(--fg);
+}
+#nar[hidden] { display: none; }
+#narStep, #narFin { display: flex; flex-direction: column; gap: 12px; max-width: 480px; margin: 0 auto; }
+#narFin[hidden], #narStep[hidden] { display: none; }
+#narImg { width: 100%; max-height: 32vh; object-fit: contain; border-radius: 18px; background: var(--surface); }
+#narWord, .txt {
+  box-sizing: border-box; width: 100%; min-height: 60px; padding: 0 14px; text-align: center;
+  border: 2px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--fg);
+  font: 800 26px/1.2 var(--f-body);
+}
+.txt { grid-column: 1 / -1; font-size: 18px; min-height: 52px; }
+.narbig { margin: 0; font: 800 24px/1.25 var(--f-display); text-align: center; }
 #bub {
   position: fixed; z-index: 23; transform: translate(-50%, -100%);
   padding: 6px 12px; border-radius: 10px; pointer-events: none;
@@ -477,7 +507,30 @@ body {
 <div id="status" role="status" aria-live="polite" hidden><span id="stSpin" class="spin" hidden></span><span id="stTxt"></span><i id="stBar" hidden></i></div>
 <div id="sleep" role="button" aria-label="Sleeping. Touch to wake." hidden></div>
 
+<div id="card" aria-live="polite"><span id="cardTxt"></span></div>
 <div id="bub" role="status" hidden></div>
+<section id="nar" role="dialog" aria-modal="true" aria-label="Name your flash cards" hidden>
+  <div id="narStep">
+    <div class="lrow"><span id="narCount" class="label"></span><button id="narLater" class="btn" type="button">Finish later</button></div>
+    <img id="narImg" alt="">
+    <input id="narWord" type="text" maxlength="24" placeholder="Type the word (like cow)" aria-label="Word to show on the card" autocomplete="off" autocapitalize="off">
+    <p class="tip">Say the word itself when you record, like "cow". The word is shown big on the card while the recording plays.</p>
+    <p id="narNote" class="tip"></p>
+    <div class="actions">
+      <button id="narRec" class="btn" type="button">Record the name</button>
+      <button id="narPlay" class="btn" type="button" hidden>Play</button>
+    </div>
+    <div class="actions">
+      <button id="narSkip" class="btn" type="button">Skip</button>
+      <button id="narNext" class="btn primary" type="button">Next</button>
+    </div>
+  </div>
+  <div id="narFin" hidden>
+    <p id="narSum" class="narbig"></p>
+    <button id="narShow" class="btn primary" type="button">Show this album in the scroll</button>
+    <button id="narNo" class="btn" type="button">Not now</button>
+  </div>
+</section>
 <div id="splash" aria-label="Little Scroll"><video id="splashV" playsinline preload="auto" poster="splash-poster.jpg" disablepictureinpicture></video></div>
 <div id="shade" hidden></div>
 <section id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
@@ -492,6 +545,7 @@ body {
     <p class="tip">Tap a photo to choose it. Then you can record its name (like "Grandma!") or remove it. Recordings stay on this phone.</p>
     <div id="grid" class="grid"></div>
     <div id="photoActions" class="actions" hidden>
+      <input id="lblIn" class="txt" type="text" maxlength="24" placeholder="Word for the flash card (like cow)" aria-label="Word for the flash card" autocomplete="off" autocapitalize="off">
       <button id="recBtn" class="btn" type="button">Record a name</button>
       <button id="playBtn" class="btn" type="button" hidden>Play name</button>
       <button id="delVoiceBtn" class="btn" type="button" hidden>Delete name</button>
@@ -503,13 +557,18 @@ body {
   <div id="albumsPanel" class="field" hidden>
     <p class="tip">Make albums from the photos you have added, like "Animals". Choose which one the scroll shows. Turn on Flash cards below to hear each name as its photo appears.</p>
     <div id="albList" class="alist"></div>
-    <div id="albMake" class="arow">
-      <input id="albNew" type="text" maxlength="24" placeholder="New album name" aria-label="New album name">
-      <button id="albAdd" class="btn" type="button">Create</button>
+    <div id="albMake" class="field">
+      <div class="arow">
+        <input id="albNew" type="text" maxlength="24" placeholder="New album name" aria-label="New album name">
+        <button id="albAdd" class="btn" type="button">Create</button>
+      </div>
+      <button id="albBuild" class="btn primary" type="button">Build flash cards</button>
+      <p class="tip">Build flash cards opens the iPhone photo picker, puts what you choose into a new album, then asks you to say and type the name of each photo.</p>
     </div>
     <div id="albEdit" class="field" hidden>
       <input id="albName" type="text" maxlength="24" aria-label="Album name">
       <p class="tip">Tap photos to put them in this album or take them out.</p>
+      <button id="albPhotos" class="btn" type="button">Add photos from the iPhone</button>
       <div id="agrid" class="grid"></div>
       <div class="actions">
         <button id="albDel" class="btn" type="button">Delete album</button>
@@ -561,7 +620,7 @@ body {
   var ask = $('ask'), askQ = $('askQ'), askBtns = $('askBtns'), askT = 0, askAns = 0;
   var voiceEl = new Audio();
 
-  var VERSION = '2026-11-07e';
+  var VERSION = '2026-11-07f';
   var DEFAULTS = { dir: 'v', auto: 'off', react: 'bounce', spin: 'on', fx: 'streak', sound: 'quiet', fit: 'fit', sleep: '5', voice: 'tap', flash: 'off', album: 'all', splash: 'on', pre: 'on', gate: 'math' };
   var cfg = {};
   for (var dk in DEFAULTS) cfg[dk] = DEFAULTS[dk];
@@ -615,7 +674,7 @@ body {
       var req = t.objectStore('photos').openCursor();
       req.onsuccess = function () {
         var c = req.result;
-        if (c) { out.push({ key: c.key, blob: c.value.blob, c: c.value.c, h: c.value.h || '', t: c.value.t || null, voice: c.value.voice || null, vtype: c.value.vtype || null }); c.continue(); }
+        if (c) { out.push({ key: c.key, blob: c.value.blob, c: c.value.c, h: c.value.h || '', t: c.value.t || null, voice: c.value.voice || null, vtype: c.value.vtype || null, label: c.value.label || null }); c.continue(); }
       };
       t.oncomplete = function () { res(out); };
       t.onerror = t.onabort = function () { rej(t.error); };
@@ -643,7 +702,7 @@ body {
   function saveRec(rec) {
     if (!dbOK || !db || rec.key === undefined) return Promise.resolve();
     return tx('readwrite', function (s) {
-      return s.put({ blob: rec.blob, c: rec.c, h: rec.h || '', t: rec.t || null, voice: rec.voice || null, vtype: rec.vtype || null }, rec.key);
+      return s.put({ blob: rec.blob, c: rec.c, h: rec.h || '', t: rec.t || null, voice: rec.voice || null, vtype: rec.vtype || null, label: rec.label || null }, rec.key);
     }).catch(function () {});
   }
 
@@ -700,8 +759,8 @@ body {
   }
   function importFiles(files) {
     var list = files.filter(function (f) { return !f.type || f.type.indexOf('image/') === 0; });
-    if (!list.length) return Promise.resolve();
-    var failed = 0, skipped = 0, i = 0, seen = {};
+    if (!list.length) return Promise.resolve([]);
+    var failed = 0, skipped = 0, i = 0, seen = {}, got = [];
     // Photos saved by older versions have no fingerprint yet; make one so repeats are caught.
     var old = records.filter(function (r) { return !r.h; }), oi = 0, hm = loadHashes(), hdirty = false;
     function fingerprint() {
@@ -719,10 +778,10 @@ body {
       return shrink(list[i]).then(function (rec) {
         return hashBlob(rec.blob).then(function (h) {
           rec.h = h;
-          if (h && seen[h]) { skipped++; return; }
-          if (h) seen[h] = 1;
+          if (h && seen[h]) { skipped++; if (got.indexOf(seen[h]) < 0) got.push(seen[h]); return; }
+          if (h) seen[h] = rec;
           return thumbOf(rec.blob).then(function (tb) { rec.t = tb; }, function () {}).then(function () {
-            records.push(rec);
+            records.push(rec); got.push(rec);
             return persist(rec);
           });
         });
@@ -732,7 +791,7 @@ body {
       }).then(step);
     }
     return fingerprint().then(function () {
-      records.forEach(function (r) { if (r.h) seen[r.h] = 1; });
+      records.forEach(function (r) { if (r.h) seen[r.h] = r; });
       return step();
     }).then(function () {
       var ok = list.length - failed - skipped;
@@ -749,6 +808,10 @@ body {
         useRecords();
         try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
       });
+    }).then(function () {
+      var ks = [];
+      got.forEach(function (r) { if (r.key !== undefined && ks.indexOf(r.key) < 0) ks.push(r.key); });
+      return ks;
     });
   }
 
@@ -848,7 +911,7 @@ body {
     var out = shownRecords().map(function (r) {
       var u = URL.createObjectURL(r.blob);
       newUrls.push(u);
-      return { url: u, c: r.c, voice: r.voice, key: r.key };
+      return { url: u, c: r.c, voice: r.voice, label: r.label || '', key: r.key };
     });
     demo = false;
     setItems(out, newUrls);
@@ -945,7 +1008,11 @@ body {
     if (el !== shownEl) {
       if (shownEl && !autoMoving) sfx('tick');
       shownEl = el;
-      if (cfg.flash === 'on' && sheet.hidden && el && el.firstElementChild) speak(el.firstElementChild, true);
+      cardHide();
+      if (cfg.flash === 'on' && sheet.hidden && el && el.firstElementChild) {
+        speak(el.firstElementChild, true);
+        cardShow(items[+el.dataset.i]);
+      }
     }
   }
   function rebuild() {
@@ -1021,6 +1088,14 @@ body {
     else if (m === 'confetti') emit('confetti', x, y, 34);
     sfx('pop');
   }
+  var cardEl = $('card'), cardTxt = $('cardTxt'), cardT = 0;
+  function cardHide() { cardEl.classList.remove('on'); }
+  function cardShow(it) {
+    clearTimeout(cardT);
+    if (!it || !it.label || cfg.flash === 'off') { cardHide(); return; }
+    cardTxt.textContent = it.label;
+    cardEl.classList.add('on');
+  }
   function speak(im, force) {
     if (!force && cfg.voice !== 'tap') return;
     var sl = im.parentNode, it = sl && items[+sl.dataset.i];
@@ -1065,6 +1140,12 @@ body {
     var s = e.target.closest ? e.target.closest('.slide') : null;
     var im = s && s.firstElementChild;
     if (!im) return;
+    if (cfg.flash === 'tap') {
+      replay(im, 'boing');
+      speak(im, true);
+      cardShow(items[+s.dataset.i]);
+      return;
+    }
     if (cfg.flash === 'on') {
       var step = horiz ? { left: size() } : { top: size() };
       step.behavior = 'smooth';
@@ -1291,6 +1372,7 @@ body {
     'sound:quiet': '<path d="M5 12h5l7-6v20l-7-6H5z" fill="currentColor"/><path d="M21 12c2.4 2.4 2.4 5.6 0 8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/>',
     'sound:normal': '<path d="M4 12h5l7-6v20l-7-6H4z" fill="currentColor"/><path d="M20 12c2.4 2.4 2.4 5.6 0 8M24 8c4.4 4.4 4.4 11.6 0 16" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/>',
     'voice:tap': '<rect x="12" y="3" width="8" height="15" rx="4" fill="currentColor"/><path d="M8 15c0 5 3 8 8 8s8-3 8-8M16 23v5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/>',
+    'flash:tap': '<rect x="5" y="4" width="22" height="16" rx="2.5" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="16" cy="25" r="3.2" fill="currentColor"/><path d="M9 25a7 7 0 0 1 14 0M5 25a11 11 0 0 1 22 0" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.6"/>',
     'flash:on': '<rect x="5" y="10" width="18" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="9" y="6" width="18" height="14" rx="2.5" fill="currentColor"/>',
     'splash:on': '<rect x="4" y="7" width="24" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M13 12l8 4-8 4z" fill="currentColor"/>',
     'pre:on': '<circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M16 15v7" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><circle cx="16" cy="10.5" r="1.8" fill="currentColor"/>'
@@ -1308,8 +1390,8 @@ body {
       tip: 'A pop on tap, a chime on spin, and a soft tick when the photo changes. The ringer switch can mute it on some phones.' },
     { key: 'voice', icons: true, label: 'Recorded names', vals: [['off', 'Off'], ['tap', 'Play on tap']],
       tip: 'Plays the name you recorded for a photo when your child taps it. Record names under "Select / Remove photos".' },
-    { key: 'flash', icons: true, label: 'Flash cards', vals: [['off', 'Off'], ['on', 'On']],
-      tip: 'Each recorded name plays by itself when its photo appears, and a tap moves to the next photo. Works best with an album.' },
+    { key: 'flash', icons: true, label: 'Flash cards', vals: [['off', 'Off'], ['on', 'Say on show'], ['tap', 'Say on tap']],
+      tip: 'Say on show: the recorded name plays and the typed word appears as soon as a photo shows up, and a tap moves to the next photo. Say on tap: the child taps a photo to hear its name and see the word. Works best with an album.' },
     { key: 'splash', icons: true, label: 'Opening splash', vals: [['on', 'On'], ['off', 'Off']],
       tip: 'A short animation with sound when the app opens. Touch the screen to skip it. Some phones play it silently.' },
     { key: 'sleep', label: 'Go dark after no touching', vals: [['0', 'Never'], ['2', '2 min'], ['5', '5 min'], ['10', '10 min']],
@@ -1374,6 +1456,7 @@ body {
     cfg[k] = v;
     try { localStorage.setItem('ls-cfg', JSON.stringify(cfg)); } catch (e) {}
     if (k === 'dir') { horiz = v === 'h'; feed.classList.toggle('h', horiz); rebuild(); }
+    else if (k === 'flash') cardHide();
     else if (k === 'fx' && v === 'off') stopFx();
     else if (k === 'fit') feed.classList.toggle('fill', v === 'fill');
     else if (k === 'album') { if (!demo && records.length) useRecords(); }
@@ -1468,6 +1551,8 @@ body {
     photoActions.hidden = !rec;
     if (!rec) return;
     var on = !!recState;
+    $('lblIn').value = rec.label || '';
+    $('lblIn').disabled = on;
     recBtn.textContent = on ? 'Stop recording' : (rec.voice ? 'Record again' : 'Record a name');
     recBtn.classList.toggle('rec', on);
     playBtn.hidden = !rec.voice || on;
@@ -1516,36 +1601,45 @@ body {
       st.rec.voice = blob; st.rec.vtype = blob.type;
       dirty = true;
       saveRec(st.rec);
-      setVoiceNote('Saved.');
-    } else setVoiceNote('Nothing was recorded. Try again.');
-    markVoiceBadges(); refreshActions();
+      st.ui.note('Saved.');
+    } else st.ui.note('Nothing was recorded. Try again.');
+    markVoiceBadges(); st.ui.refresh();
   }
-  recBtn.addEventListener('click', function () {
+  function toggleRec(rec, ui) {
     if (recState) { stopRec(); return; }
-    var rec = records[picked];
     if (!rec) return;
     if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder)) {
-      setVoiceNote('Recording is not available here. It works in the installed copy of the app.');
+      ui.note('Recording is not available here. It works in the installed copy of the app.');
       return;
     }
-    setVoiceNote('');
+    ui.note('');
     setSession('play-and-record');
     navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
       var types = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'], mt = '';
       for (var k = 0; k < types.length; k++) { if (MediaRecorder.isTypeSupported(types[k])) { mt = types[k]; break; } }
       var mr = mt ? new MediaRecorder(stream, { mimeType: mt }) : new MediaRecorder(stream);
-      var st = { rec: rec, mr: mr, chunks: [], stream: stream, timer: 0 };
+      var st = { rec: rec, mr: mr, chunks: [], stream: stream, timer: 0, ui: ui };
       mr.ondataavailable = function (ev) { if (ev.data && ev.data.size) st.chunks.push(ev.data); };
       mr.onstop = function () { finishRec(st); };
       recState = st;
       mr.start();
       st.timer = setTimeout(stopRec, 8000);
-      refreshActions();
-      setVoiceNote('Recording. Say the name, then tap Stop. It stops by itself after 8 seconds.');
+      ui.refresh();
+      ui.note('Recording. Say the name, then tap Stop. It stops by itself after 8 seconds.');
     }).catch(function () {
       setSession('playback');
-      setVoiceNote('The microphone is blocked. Allow it for this app in the iPhone Settings, then try again.');
+      ui.note('The microphone is blocked. Allow it for this app in the iPhone Settings, then try again.');
     });
+  }
+  var mgrUI = { note: setVoiceNote, refresh: refreshActions };
+  recBtn.addEventListener('click', function () { toggleRec(records[picked], mgrUI); });
+  $('lblIn').addEventListener('change', function () {
+    var rec = records[picked];
+    if (!rec) return;
+    rec.label = $('lblIn').value.trim().slice(0, 24) || null;
+    dirty = true;
+    saveRec(rec);
+    setVoiceNote(rec.label ? 'Word saved.' : 'Word removed.');
   });
   playBtn.addEventListener('click', function () {
     var rec = records[picked];
@@ -1816,20 +1910,115 @@ body {
     picker.click();
   }
   $('addBtn').addEventListener('click', function () {
+    building = null;
     if (cfg.pre === 'off') openPicker(); else { $('preSkip').checked = false; pre.hidden = false; }
   });
   $('preGo').addEventListener('click', function () {
     if ($('preSkip').checked) setOpt('pre', 'off');
     openPicker();
   });
-  $('preCancel').addEventListener('click', function () { pre.hidden = true; });
+  $('preCancel').addEventListener('click', function () { pre.hidden = true; building = null; });
 
   picker.addEventListener('change', function () {
     var files = Array.prototype.slice.call(picker.files || []);
     picker.value = '';
     closeSheet();
-    ready.then(function () { return importFiles(files); });
+    var spec = building; building = null;
+    ready.then(function () { return importFiles(files); }).then(function (keys) { if (spec) finishBuild(spec, keys || []); });
   });
+  picker.addEventListener('cancel', function () { building = null; });
+
+  /* ---------- flash card builder: pick photos, then name each one ---------- */
+  var building = null, narList = [], narI = 0, narAlbum = null, narUrl = null;
+  var narWord = $('narWord'), narRecBtn = $('narRec'), narPlayBtn = $('narPlay'), narNextBtn = $('narNext'), narSkipBtn = $('narSkip');
+  function narSay(t) { $('narNote').textContent = t || ''; }
+  function narRefresh() {
+    var rec = narList[narI];
+    if (!rec) return;
+    var on = !!recState;
+    narRecBtn.textContent = on ? 'Stop recording' : (rec.voice ? 'Record again' : 'Record the name');
+    narRecBtn.classList.toggle('rec', on);
+    narPlayBtn.hidden = !rec.voice || on;
+    narNextBtn.hidden = on; narSkipBtn.hidden = on; $('narLater').hidden = on;
+    narWord.disabled = on;
+    narNextBtn.textContent = narI >= narList.length - 1 ? 'Finish' : 'Next';
+  }
+  var narUI = { note: narSay, refresh: narRefresh };
+  function narShowOne() {
+    var rec = narList[narI];
+    $('narFin').hidden = true; $('narStep').hidden = false;
+    $('narCount').textContent = 'Photo ' + (narI + 1) + ' of ' + narList.length;
+    if (narUrl) URL.revokeObjectURL(narUrl);
+    narUrl = URL.createObjectURL(rec.t || rec.blob);
+    $('narImg').src = narUrl;
+    narWord.value = rec.label || '';
+    narSay(rec.voice ? 'This photo already has a recording. Record again to replace it.' : '');
+    narRefresh();
+  }
+  function narSave() {
+    var rec = narList[narI];
+    if (!rec) return;
+    rec.label = narWord.value.trim().slice(0, 24) || null;
+    dirty = true;
+    saveRec(rec);
+  }
+  function narFinish() {
+    $('narStep').hidden = true; $('narFin').hidden = false;
+    var named = narList.filter(function (r) { return r.voice || r.label; }).length;
+    $('narSum').textContent = '"' + narAlbum.name + '" now has ' + inAlbum(narAlbum).length + (inAlbum(narAlbum).length === 1 ? ' photo' : ' photos')
+      + '. ' + named + ' of the ' + narList.length + ' you picked ' + (named === 1 ? 'has' : 'have') + ' a name.';
+  }
+  function narAdvance(save) {
+    if (recState) return;
+    if (save) narSave();
+    if (narI < narList.length - 1) { narI++; narShowOne(); } else narFinish();
+  }
+  function narClose(show) {
+    $('nar').hidden = true;
+    if (narUrl) { URL.revokeObjectURL(narUrl); narUrl = null; }
+    $('narImg').removeAttribute('src');
+    if (show && narAlbum) { setOpt('album', narAlbum.id); if (cfg.flash === 'off') setOpt('flash', 'on'); }
+    useRecords();
+  }
+  narRecBtn.addEventListener('click', function () { toggleRec(narList[narI], narUI); });
+  narPlayBtn.addEventListener('click', function () {
+    var rec = narList[narI];
+    if (!rec || !rec.voice) return;
+    if (prevPlay) URL.revokeObjectURL(prevPlay);
+    prevPlay = URL.createObjectURL(rec.voice);
+    voiceEl.src = prevPlay;
+    var pr = voiceEl.play();
+    if (pr && pr.catch) pr.catch(function () {});
+  });
+  narNextBtn.addEventListener('click', function () { narAdvance(true); });
+  narSkipBtn.addEventListener('click', function () { narAdvance(false); });
+  $('narLater').addEventListener('click', function () { if (!recState) narFinish(); });
+  narWord.addEventListener('keydown', function (e) { if (e.key === 'Enter') narWord.blur(); });
+  $('narShow').addEventListener('click', function () { narClose(true); });
+  $('narNo').addEventListener('click', function () { narClose(false); });
+  function finishBuild(spec, keys) {
+    if (!keys.length) { showStatus('No photos were added.', 3000); return; }
+    var a = spec.albumId ? albumById(spec.albumId) : null;
+    if (!a) {
+      a = { id: 'a' + Date.now().toString(36), name: (spec.name || 'Flash cards').slice(0, 24), keys: [] };
+      albums.push(a);
+    }
+    keys.forEach(function (k) { if (a.keys.indexOf(k) < 0) a.keys.push(k); });
+    saveAlbums();
+    narAlbum = a;
+    narList = keys.map(function (k) { return records.filter(function (r) { return r.key === k; })[0]; }).filter(Boolean);
+    if (!narList.length) return;
+    narI = 0;
+    $('nar').hidden = false;
+    $('nar').scrollTop = 0;
+    narShowOne();
+  }
+  function startBuild(spec) {
+    building = spec;
+    if (cfg.pre === 'off') openPicker(); else { $('preSkip').checked = false; pre.hidden = false; }
+  }
+  $('albBuild').addEventListener('click', function () { startBuild({ name: $('albNew').value.trim() }); });
+  $('albPhotos').addEventListener('click', function () { if (albEditing) startBuild({ albumId: albEditing.id }); });
 
   function updateUI() {
     pill.hidden = !demo;
