@@ -514,7 +514,7 @@ body {
   var ask = $('ask'), askQ = $('askQ'), askBtns = $('askBtns'), askT = 0, askAns = 0;
   var voiceEl = new Audio();
 
-  var VERSION = '2026-11-06e';
+  var VERSION = '2026-11-07a';
   var DEFAULTS = { dir: 'v', auto: 'off', react: 'bounce', spin: 'on', fx: 'streak', sound: 'quiet', fit: 'fit', sleep: '5', voice: 'tap', pre: 'on', gate: 'math' };
   var cfg = {};
   for (var dk in DEFAULTS) cfg[dk] = DEFAULTS[dk];
@@ -562,21 +562,27 @@ body {
       t.onabort = function () { rej(t.error); };
     });
   }
+  function readAll() {
+    return new Promise(function (res, rej) {
+      var out = [], t = db.transaction('photos', 'readonly');
+      var req = t.objectStore('photos').openCursor();
+      req.onsuccess = function () {
+        var c = req.result;
+        if (c) { out.push({ key: c.key, blob: c.value.blob, c: c.value.c, h: c.value.h || '', t: c.value.t || null, voice: c.value.voice || null, vtype: c.value.vtype || null }); c.continue(); }
+      };
+      t.oncomplete = function () { res(out); };
+      t.onerror = t.onabort = function () { rej(t.error); };
+    });
+  }
   function loadStored() {
     return openDB().then(function (d) {
       db = d;
-      return new Promise(function (res, rej) {
-        var out = [], t = db.transaction('photos', 'readonly');
-        var req = t.objectStore('photos').openCursor();
-        req.onsuccess = function () {
-          var c = req.result;
-          if (c) { out.push({ key: c.key, blob: c.value.blob, c: c.value.c, h: c.value.h || '', t: c.value.t || null, voice: c.value.voice || null, vtype: c.value.vtype || null }); c.continue(); }
-        };
-        t.oncomplete = function () { res(out); };
-        t.onerror = t.onabort = function () { rej(t.error); };
-      });
+      return readAll();
     }).catch(function () { dbOK = false; return []; });
   }
+  // Fingerprints for photos saved before duplicate checking. Kept apart from the photo files so those are never rewritten.
+  function loadHashes() { try { return JSON.parse(localStorage.getItem('ls-hash')) || {}; } catch (e) { return {}; } }
+  function saveHashes(m) { try { localStorage.setItem('ls-hash', JSON.stringify(m)); } catch (e) {} }
   function persist(rec) {
     if (!dbOK || !db) return Promise.resolve();
     return tx('readwrite', function (s) { return s.add({ blob: rec.blob, c: rec.c, h: rec.h || '', t: rec.t || null }); })
@@ -650,12 +656,15 @@ body {
     if (!list.length) return Promise.resolve();
     var failed = 0, skipped = 0, i = 0, seen = {};
     // Photos saved by older versions have no fingerprint yet; make one so repeats are caught.
-    var old = records.filter(function (r) { return !r.h; }), oi = 0;
+    var old = records.filter(function (r) { return !r.h; }), oi = 0, hm = loadHashes(), hdirty = false;
     function fingerprint() {
-      if (oi >= old.length) return Promise.resolve();
+      while (oi < old.length && old[oi].key !== undefined && hm[old[oi].key]) { old[oi].h = hm[old[oi].key]; oi++; }
+      if (oi >= old.length) { if (hdirty) saveHashes(hm); return Promise.resolve(); }
       var r = old[oi++];
       showStatus('Checking your photos... ' + oi + ' of ' + old.length, 0, { spin: true, frac: oi / old.length });
-      return hashBlob(r.blob).then(function (h) { if (h) { r.h = h; saveRec(r); } }).then(fingerprint);
+      return hashBlob(r.blob).then(function (h) {
+        if (h) { r.h = h; if (r.key !== undefined) { hm[r.key] = h; hdirty = true; } }
+      }).then(fingerprint);
     }
     function step() {
       if (i >= list.length) return Promise.resolve();
@@ -684,10 +693,15 @@ body {
       if (skipped) msg += (msg ? ' ' : '') + (skipped === 1 ? '1 was already in the scroll.' : skipped + ' were already in the scroll.');
       if (failed) msg += (msg ? ' ' : '') + failed + ' could not be read.';
       showStatus(msg || 'Nothing new to add.', 3200);
-      if (ok > 0) {
+      if (ok <= 0) return;
+      // Show the saved copies, not the ones still held in memory from the import.
+      var fresh = (dbOK && db) ? readAll().then(function (stored) {
+        if (stored.length >= records.length) records = stored;
+      }).catch(function () {}) : Promise.resolve();
+      return fresh.then(function () {
         useRecords();
         try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
-      }
+      });
     });
   }
 
@@ -770,7 +784,7 @@ body {
     var out = records.map(function (r) {
       var u = URL.createObjectURL(r.blob);
       newUrls.push(u);
-      return { url: u, c: r.c, voice: r.voice };
+      return { url: u, c: r.c, voice: r.voice, key: r.key };
     });
     demo = false;
     setItems(out, newUrls);
@@ -804,6 +818,20 @@ body {
     lastIdx = bag.pop();
     return lastIdx;
   }
+  // If a picture fails to load, fetch a fresh copy from storage once instead of leaving a broken icon.
+  function healItem(it) {
+    if (it.healing) return it.healing;
+    var get = (it.key !== undefined && dbOK && db)
+      ? tx('readonly', function (s) { return s.get(it.key); }) : Promise.resolve(null);
+    it.healing = get.then(function (v) {
+      if (!v || !v.blob) return null;
+      var u = URL.createObjectURL(v.blob);
+      urls.push(u);
+      it.url = u;
+      return u;
+    }).catch(function () { return null; });
+    return it.healing;
+  }
   function makeSlide(i) {
     var s = document.createElement('section');
     s.className = 'slide';
@@ -815,6 +843,11 @@ body {
     im.decoding = 'async';
     im.draggable = false;
     im.src = items[i].url;
+    var it = items[i];
+    im.onerror = function () {
+      im.onerror = null;
+      healItem(it).then(function (u) { if (u) im.src = u; });
+    };
     s.appendChild(im);
     return s;
   }
@@ -1243,6 +1276,18 @@ body {
     grid.textContent = '';
     picked = -1;
   }
+  function healThumb(rec) {
+    var get = (rec.key !== undefined && dbOK && db)
+      ? tx('readonly', function (s) { return s.get(rec.key); }) : Promise.resolve(null);
+    return get.then(function (v) {
+      if (!v) return null;
+      return (v.t ? Promise.resolve(v.t) : thumbOf(v.blob)).then(function (tb) {
+        var u = URL.createObjectURL(tb);
+        thumbUrls.push(u);
+        return u;
+      });
+    }).catch(function () { return null; });
+  }
   function openManage() {
     managePanel.hidden = false;
     updateUI();
@@ -1256,6 +1301,10 @@ body {
       b.setAttribute('aria-label', 'Photo ' + (i + 1));
       b.style.background = rec.c;
       var im = new Image(); im.alt = ''; b.appendChild(im); imgs.push(im);
+      im.onerror = function () {
+        im.onerror = null;
+        healThumb(rec).then(function (u) { if (u) im.src = u; });
+      };
       grid.appendChild(b);
     });
     markVoiceBadges();
@@ -1265,7 +1314,7 @@ body {
       if (run !== thumbRun || n >= records.length) return;
       var idx = n++;
       var rc = records[idx];
-      (rc.t ? Promise.resolve(rc.t) : thumbOf(rc.blob).then(function (tb) { rc.t = tb; saveRec(rc); return tb; })).then(function (tb) {
+      (rc.t ? Promise.resolve(rc.t) : thumbOf(rc.blob).then(function (tb) { rc.t = tb; return tb; })).then(function (tb) {
         if (run !== thumbRun) return;
         var u = URL.createObjectURL(tb);
         thumbUrls.push(u);
@@ -1510,18 +1559,10 @@ body {
     wipe.then(function () { records = []; closeSheet(); makeDemo(); });
   });
 
-  var pre = $('pre'), waiting = false, waitT = 0;
-  function stopWaiting() { waiting = false; clearTimeout(waitT); }
-  function showWaiting() {
-    if (!waiting) return;
-    showStatus('Getting your photos ready... tap here to hide', 0, { spin: true });
-    clearTimeout(waitT);
-    waitT = setTimeout(function () { if (waiting) { stopWaiting(); statusEl.hidden = true; } }, 90000);
-  }
+  var pre = $('pre');
   function openPicker() {
     pre.hidden = true;
     closeSheet();
-    waiting = true;
     picker.click();
   }
   $('addBtn').addEventListener('click', function () {
@@ -1532,13 +1573,8 @@ body {
     openPicker();
   });
   $('preCancel').addEventListener('click', function () { pre.hidden = true; });
-  window.addEventListener('focus', function () { setTimeout(showWaiting, 400); });
-  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') setTimeout(showWaiting, 400); });
-  picker.addEventListener('cancel', function () { stopWaiting(); statusEl.hidden = true; });
-  statusEl.addEventListener('click', function () { if (waiting) { stopWaiting(); statusEl.hidden = true; } });
 
   picker.addEventListener('change', function () {
-    stopWaiting();
     var files = Array.prototype.slice.call(picker.files || []);
     picker.value = '';
     closeSheet();
