@@ -212,6 +212,12 @@ body {
   text-align: center;
   overflow: hidden;
 }
+#bub {
+  position: fixed; z-index: 23; transform: translate(-50%, -100%);
+  padding: 6px 12px; border-radius: 10px; pointer-events: none;
+  background: var(--fg); color: var(--surface); font: 800 14px/1.2 var(--f-body); white-space: nowrap;
+}
+#bub::after { content: ''; position: absolute; left: 50%; bottom: -4px; width: 9px; height: 9px; background: var(--fg); transform: translateX(-50%) rotate(45deg); }
 #status .spin {
   display: inline-block; width: 13px; height: 13px; margin-right: 8px; vertical-align: -2px;
   border: 2.5px solid currentColor; border-right-color: transparent; border-radius: 50%;
@@ -409,6 +415,20 @@ body {
 #ask #askQ { font-size: 42px; }
 #askBtns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 #askBtns .btn { min-height: 68px; font-size: 28px; }
+.alist { display: flex; flex-direction: column; gap: 8px; }
+.arow { display: flex; gap: 8px; }
+.arow .btn { flex: 1; }
+.arow .aedit { flex: 0 0 auto; }
+.aname[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+#albumsPanel input[type="text"] {
+  box-sizing: border-box; flex: 1; min-width: 0; min-height: 56px; padding: 0 14px;
+  border: 2px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--fg);
+  font: 800 17px/1.2 var(--f-body);
+}
+#agrid .thumb[aria-pressed="true"]::after {
+  content: '\2713'; position: absolute; right: 4px; top: 4px; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--accent); color: var(--on-accent); font: 800 15px/24px var(--f-body); text-align: center;
+}
 .actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
 .btn.rec { background: var(--accent); color: var(--on-accent); border-color: transparent; }
 
@@ -447,6 +467,7 @@ body {
 <div id="status" role="status" aria-live="polite" hidden><span id="stSpin" class="spin" hidden></span><span id="stTxt"></span><i id="stBar" hidden></i></div>
 <div id="sleep" role="button" aria-label="Sleeping. Touch to wake." hidden></div>
 
+<div id="bub" role="status" hidden></div>
 <div id="shade" hidden></div>
 <section id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
   <div class="head">
@@ -466,6 +487,25 @@ body {
       <button id="rmBtn" class="btn" type="button">Remove photo</button>
     </div>
     <p id="voiceNote" class="tip" hidden></p>
+  </div>
+  <button id="albumsBtn" class="btn" type="button" hidden>Albums</button>
+  <div id="albumsPanel" class="field" hidden>
+    <p class="tip">Make albums from the photos you have added, like "Animals". Choose which one the scroll shows. Turn on Flash cards below to hear each name as its photo appears.</p>
+    <div id="albList" class="alist"></div>
+    <div id="albMake" class="arow">
+      <input id="albNew" type="text" maxlength="24" placeholder="New album name" aria-label="New album name">
+      <button id="albAdd" class="btn" type="button">Create</button>
+    </div>
+    <div id="albEdit" class="field" hidden>
+      <input id="albName" type="text" maxlength="24" aria-label="Album name">
+      <p class="tip">Tap photos to put them in this album or take them out.</p>
+      <div id="agrid" class="grid"></div>
+      <div class="actions">
+        <button id="albDel" class="btn" type="button">Delete album</button>
+        <button id="albDone" class="btn" type="button">Done editing</button>
+      </div>
+    </div>
+    <button id="albClose" class="btn" type="button">Close albums</button>
   </div>
   <div id="opts" class="opts"></div>
   <button id="calm" class="btn" type="button">Calm preset</button>
@@ -510,8 +550,8 @@ body {
   var ask = $('ask'), askQ = $('askQ'), askBtns = $('askBtns'), askT = 0, askAns = 0;
   var voiceEl = new Audio();
 
-  var VERSION = '2026-11-07b';
-  var DEFAULTS = { dir: 'v', auto: 'off', react: 'bounce', spin: 'on', fx: 'streak', sound: 'quiet', fit: 'fit', sleep: '5', voice: 'tap', pre: 'on', gate: 'math' };
+  var VERSION = '2026-11-07c';
+  var DEFAULTS = { dir: 'v', auto: 'off', react: 'bounce', spin: 'on', fx: 'streak', sound: 'quiet', fit: 'fit', sleep: '5', voice: 'tap', flash: 'off', album: 'all', pre: 'on', gate: 'math' };
   var cfg = {};
   for (var dk in DEFAULTS) cfg[dk] = DEFAULTS[dk];
   try {
@@ -775,9 +815,26 @@ body {
       updateUI();
     });
   }
+  var albums = [];
+  try { albums = JSON.parse(localStorage.getItem('ls-albums')) || []; } catch (e) { albums = []; }
+  function saveAlbums() { try { localStorage.setItem('ls-albums', JSON.stringify(albums)); } catch (e) {} }
+  function albumById(id) {
+    var L = albums || [];
+    for (var i = 0; i < L.length; i++) if (L[i].id === id) return L[i];
+    return null;
+  }
+  function inAlbum(a) {
+    return records.filter(function (r) { return r.key !== undefined && a.keys.indexOf(r.key) >= 0; });
+  }
+  // The photos the scroll draws from: the chosen album, or everything when none is chosen or it is empty.
+  function shownRecords() {
+    var a = cfg.album !== 'all' ? albumById(cfg.album) : null;
+    var sub = a ? inAlbum(a) : [];
+    return sub.length ? sub : records;
+  }
   function useRecords() {
     var newUrls = [];
-    var out = records.map(function (r) {
+    var out = shownRecords().map(function (r) {
       var u = URL.createObjectURL(r.blob);
       newUrls.push(u);
       return { url: u, c: r.c, voice: r.voice, key: r.key };
@@ -874,7 +931,11 @@ body {
     while (feed.children.length - c > 12) feed.removeChild(feed.lastElementChild);
     settled = cur();
     var el = feed.children[settled];
-    if (el !== shownEl) { if (shownEl && !autoMoving) sfx('tick'); shownEl = el; }
+    if (el !== shownEl) {
+      if (shownEl && !autoMoving) sfx('tick');
+      shownEl = el;
+      if (cfg.flash === 'on' && sheet.hidden && el && el.firstElementChild) speak(el.firstElementChild, true);
+    }
   }
   function rebuild() {
     feed.textContent = '';
@@ -949,8 +1010,8 @@ body {
     else if (m === 'confetti') emit('confetti', x, y, 34);
     sfx('pop');
   }
-  function speak(im) {
-    if (cfg.voice !== 'tap') return;
+  function speak(im, force) {
+    if (!force && cfg.voice !== 'tap') return;
     var sl = im.parentNode, it = sl && items[+sl.dataset.i];
     if (!it || !it.voice) return;
     try {
@@ -993,6 +1054,12 @@ body {
     var s = e.target.closest ? e.target.closest('.slide') : null;
     var im = s && s.firstElementChild;
     if (!im) return;
+    if (cfg.flash === 'on') {
+      var step = horiz ? { left: size() } : { top: size() };
+      step.behavior = 'smooth';
+      feed.scrollBy(step);
+      return;
+    }
     if (now - lastTap.t < DBL_MS && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < DBL_PX) {
       lastTap.t = 0;
       if (cfg.spin !== 'off') { replay(im, 'spin'); sfx('chime'); }
@@ -1213,6 +1280,7 @@ body {
     'sound:quiet': '<path d="M5 12h5l7-6v20l-7-6H5z" fill="currentColor"/><path d="M21 12c2.4 2.4 2.4 5.6 0 8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/>',
     'sound:normal': '<path d="M4 12h5l7-6v20l-7-6H4z" fill="currentColor"/><path d="M20 12c2.4 2.4 2.4 5.6 0 8M24 8c4.4 4.4 4.4 11.6 0 16" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/>',
     'voice:tap': '<rect x="12" y="3" width="8" height="15" rx="4" fill="currentColor"/><path d="M8 15c0 5 3 8 8 8s8-3 8-8M16 23v5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/>',
+    'flash:on': '<rect x="5" y="10" width="18" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="9" y="6" width="18" height="14" rx="2.5" fill="currentColor"/>',
     'pre:on': '<circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M16 15v7" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><circle cx="16" cy="10.5" r="1.8" fill="currentColor"/>'
   };
   var OPTS = [
@@ -1228,6 +1296,8 @@ body {
       tip: 'A pop on tap, a chime on spin, and a soft tick when the photo changes. The ringer switch can mute it on some phones.' },
     { key: 'voice', icons: true, label: 'Recorded names', vals: [['off', 'Off'], ['tap', 'Play on tap']],
       tip: 'Plays the name you recorded for a photo when your child taps it. Record names under "Select / Remove photos".' },
+    { key: 'flash', icons: true, label: 'Flash cards', vals: [['off', 'Off'], ['on', 'On']],
+      tip: 'Each recorded name plays by itself when its photo appears, and a tap moves to the next photo. Works best with an album.' },
     { key: 'sleep', label: 'Go dark after no touching', vals: [['0', 'Never'], ['2', '2 min'], ['5', '5 min'], ['10', '10 min']],
       tip: 'The screen turns fully black and the app stops working so the battery lasts. A touch wakes it. With Never, the screen stays on until the phone locks it.' },
     { key: 'pre', icons: true, label: 'Tip before adding photos', vals: [['on', 'On'], ['off', 'Off']] },
@@ -1264,14 +1334,27 @@ body {
       seg.appendChild(b);
     });
     f.appendChild(head); f.appendChild(seg);
-    if (o.icons) { var nm = document.createElement('p'); nm.className = 'tip'; nm.id = 'nm-' + o.key; f.appendChild(nm); }
     if (tp) f.appendChild(tp);
     optsEl.appendChild(f);
   });
   optsEl.addEventListener('click', function (e) {
     var b = e.target.closest('.seg-btn');
-    if (b) setOpt(b.dataset.key, b.dataset.val);
+    if (!b) return;
+    if (b.classList.contains('ico')) showBub(b);
+    setOpt(b.dataset.key, b.dataset.val);
   });
+  var bub = $('bub'), bubT = 0;
+  function hideBub() { clearTimeout(bubT); bub.hidden = true; }
+  function showBub(btn) {
+    bub.textContent = btn.title;
+    bub.hidden = false;
+    var r = btn.getBoundingClientRect(), w = bub.offsetWidth;
+    bub.style.left = Math.min(Math.max(r.left + r.width / 2, w / 2 + 8), window.innerWidth - w / 2 - 8) + 'px';
+    bub.style.top = (r.top - 8) + 'px';
+    clearTimeout(bubT);
+    bubT = setTimeout(hideBub, 1600);
+  }
+  sheet.addEventListener('scroll', hideBub, { passive: true });
   function setOpt(k, v) {
     if (cfg[k] === v) return;
     cfg[k] = v;
@@ -1279,6 +1362,7 @@ body {
     if (k === 'dir') { horiz = v === 'h'; feed.classList.toggle('h', horiz); rebuild(); }
     else if (k === 'fx' && v === 'off') stopFx();
     else if (k === 'fit') feed.classList.toggle('fill', v === 'fill');
+    else if (k === 'album') { if (!demo && records.length) useRecords(); }
     else if (k === 'auto') syncAuto();
     else if (k === 'sleep') { lastInput = performance.now(); armSleep(); }
     else if (k === 'sound' && v !== 'off') sfx('pop');
@@ -1303,6 +1387,7 @@ body {
     thumbUrls.forEach(function (u) { URL.revokeObjectURL(u); });
     thumbUrls = [];
     grid.textContent = '';
+    $('agrid').textContent = '';
     picked = -1;
   }
   function healThumb(rec) {
@@ -1318,6 +1403,7 @@ body {
     }).catch(function () { return null; });
   }
   function openManage() {
+    closeAlbums();
     managePanel.hidden = false;
     updateUI();
     dropThumbs();
@@ -1401,6 +1487,7 @@ body {
     if (b) b.remove();
     grid.querySelectorAll('.thumb').forEach(function (t, j) { t.dataset.i = j; });
     unpersist(rec);
+    pruneAlbums(rec.key);
     refreshActions();
     if (!records.length) closeManage(); else updateUI();
   });
@@ -1543,9 +1630,10 @@ body {
   });
   $('askCancel').addEventListener('click', closeAsk);
   function closeSheet() {
-    sheet.hidden = true; shade.hidden = true; $('pre').hidden = true; resetClear(); resetReset();
+    sheet.hidden = true; shade.hidden = true; $('pre').hidden = true; resetClear(); resetReset(); hideBub();
     closeAsk();
     closeManage();
+    closeAlbums();
     if (dirty) { dirty = false; if (records.length) useRecords(); else makeDemo(); }
   }
   shade.addEventListener('click', closeSheet);
@@ -1585,7 +1673,110 @@ body {
     var wipe = ready.then(function () {
       return (dbOK && db) ? tx('readwrite', function (s) { return s.clear(); }).catch(function () {}) : null;
     });
-    wipe.then(function () { records = []; closeSheet(); makeDemo(); });
+    wipe.then(function () { records = []; albums = []; saveAlbums(); setOpt('album', 'all'); closeSheet(); makeDemo(); });
+  });
+
+  /* ---------- albums ---------- */
+  var albumsPanel = $('albumsPanel'), albEditing = null, delArmed = false, delT = 0;
+  function renderAlbums() {
+    var list = $('albList');
+    list.textContent = '';
+    albEditing = null;
+    $('albEdit').hidden = true; $('albMake').hidden = false; list.hidden = false;
+    function row(label, id, a) {
+      var r = document.createElement('div'); r.className = 'arow';
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn aname'; b.textContent = label;
+      b.setAttribute('aria-pressed', String(id === 'all' ? (cfg.album === 'all' || !albumById(cfg.album)) : cfg.album === id));
+      b.addEventListener('click', function () {
+        if (a && !inAlbum(a).length) showStatus('That album is empty, so all photos are showing.', 2600);
+        setOpt('album', id);
+        renderAlbums();
+      });
+      r.appendChild(b);
+      if (a) {
+        var e = document.createElement('button');
+        e.type = 'button'; e.className = 'btn aedit'; e.textContent = 'Edit';
+        e.addEventListener('click', function () { openAlbumEdit(a); });
+        r.appendChild(e);
+      }
+      list.appendChild(r);
+    }
+    row('All photos (' + records.length + ')', 'all', null);
+    albums.forEach(function (a) { row(a.name + ' (' + inAlbum(a).length + ')', a.id, a); });
+  }
+  function openAlbumEdit(a) {
+    albEditing = a;
+    $('albList').hidden = true; $('albMake').hidden = true; $('albEdit').hidden = false;
+    $('albName').value = a.name;
+    resetDel();
+    dropThumbs();
+    var run = thumbRun, target = $('agrid'), imgs = [];
+    var recs = records.filter(function (r) { return r.key !== undefined; });
+    recs.forEach(function (rec) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'thumb'; b.dataset.k = rec.key;
+      b.setAttribute('aria-pressed', String(a.keys.indexOf(rec.key) >= 0));
+      b.setAttribute('aria-label', 'Photo');
+      b.style.background = rec.c;
+      var im = new Image(); im.alt = ''; b.appendChild(im); imgs.push(im);
+      im.onerror = function () { im.onerror = null; healThumb(rec).then(function (u) { if (u) im.src = u; }); };
+      target.appendChild(b);
+    });
+    var n = 0;
+    (function next() {
+      if (run !== thumbRun || n >= recs.length) return;
+      var idx = n++, rc = recs[idx];
+      (rc.t ? Promise.resolve(rc.t) : thumbOf(rc.blob).then(function (tb) { rc.t = tb; return tb; })).then(function (tb) {
+        if (run !== thumbRun) return;
+        var u = URL.createObjectURL(tb);
+        thumbUrls.push(u);
+        imgs[idx].src = u;
+      }).catch(function () {}).then(next);
+    })();
+  }
+  function resetDel() { delArmed = false; clearTimeout(delT); $('albDel').textContent = 'Delete album'; }
+  function closeAlbums() {
+    if (albumsPanel.hidden) return;
+    albumsPanel.hidden = true; albEditing = null; resetDel(); dropThumbs(); updateUI();
+  }
+  function pruneAlbums(key) {
+    albums.forEach(function (a) { var i = a.keys.indexOf(key); if (i >= 0) a.keys.splice(i, 1); });
+    saveAlbums();
+  }
+  $('albumsBtn').addEventListener('click', function () { closeManage(); albumsPanel.hidden = false; renderAlbums(); updateUI(); });
+  $('albClose').addEventListener('click', closeAlbums);
+  $('albAdd').addEventListener('click', function () {
+    var nm = $('albNew').value.trim() || ('Album ' + (albums.length + 1));
+    var a = { id: 'a' + Date.now().toString(36), name: nm.slice(0, 24), keys: [] };
+    albums.push(a); saveAlbums();
+    $('albNew').value = '';
+    openAlbumEdit(a);
+  });
+  $('agrid').addEventListener('click', function (e) {
+    var b = e.target.closest('.thumb');
+    if (!b || !albEditing) return;
+    var k = +b.dataset.k, i = albEditing.keys.indexOf(k);
+    if (i >= 0) albEditing.keys.splice(i, 1); else albEditing.keys.push(k);
+    b.setAttribute('aria-pressed', String(i < 0));
+    saveAlbums();
+    if (cfg.album === albEditing.id) dirty = true;
+  });
+  $('albName').addEventListener('change', function () {
+    if (!albEditing) return;
+    var v = $('albName').value.trim();
+    if (v) { albEditing.name = v.slice(0, 24); saveAlbums(); } else $('albName').value = albEditing.name;
+  });
+  $('albDone').addEventListener('click', function () { dropThumbs(); renderAlbums(); updateUI(); });
+  $('albDel').addEventListener('click', function () {
+    if (!albEditing) return;
+    if (!delArmed) { delArmed = true; $('albDel').textContent = 'Tap again to delete'; delT = setTimeout(resetDel, 4000); return; }
+    var id = albEditing.id;
+    albums = albums.filter(function (a) { return a.id !== id; });
+    saveAlbums();
+    resetDel();
+    if (cfg.album === id) setOpt('album', 'all');
+    dropThumbs(); renderAlbums(); updateUI();
   });
 
   var pre = $('pre');
@@ -1618,14 +1809,12 @@ body {
     optsEl.querySelectorAll('.seg-btn').forEach(function (b) {
       b.setAttribute('aria-pressed', String(cfg[b.dataset.key] === b.dataset.val));
     });
-    OPTS.forEach(function (o) {
-      if (!o.icons) return;
-      var el = $('nm-' + o.key);
-      o.vals.forEach(function (v) { if (v[0] === cfg[o.key]) el.textContent = v[1]; });
-    });
     manageBtn.hidden = demo || !records.length || !managePanel.hidden;
+    var shown = demo ? [] : shownRecords(), al = cfg.album !== 'all' ? albumById(cfg.album) : null;
     countEl.textContent = demo ? 'No photos added yet. The scroll is showing sample shapes.'
-      : records.length + (records.length === 1 ? ' photo is' : ' photos are') + ' in the scroll, shuffled forever.';
+      : (al && shown.length !== records.length ? 'Album "' + al.name + '": ' : '')
+        + shown.length + (shown.length === 1 ? ' photo is' : ' photos are') + ' in the scroll, shuffled forever.';
+    $('albumsBtn').hidden = demo || !records.length || !dbOK || !$('albumsPanel').hidden;
   }
   var stT = 0;
   function showStatus(t, ms, o) {
