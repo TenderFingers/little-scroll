@@ -1,4 +1,4 @@
-import os, re, json
+import os, re, json, shutil
 D = os.path.dirname(os.path.abspath(__file__))
 os.chdir(D)
 OUT = os.environ.get('LS_OUT') or os.path.dirname(D)  # the repo root, where GitHub Pages serves from
@@ -18,7 +18,7 @@ out = ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
 os.makedirs(OUT, exist_ok=True)
 open(os.path.join(OUT, 'index.html'), 'w', encoding='utf8').write(out)
 open(os.path.join(OUT, 'sw.js'), 'w', encoding='utf8').write("""var CACHE = 'little-scroll-%s';
-var FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon.png'];
+var FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon.png', 'splash.mp4', 'splash-poster.jpg'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); }));
@@ -50,8 +50,11 @@ self.addEventListener('fetch', function (e) {
 """ % VER)
 open(os.path.join(OUT, 'manifest.webmanifest'), 'w', encoding='utf8').write(json.dumps({
     "name": "Little Scroll", "short_name": "Little Scroll", "start_url": "./", "scope": "./",
-    "display": "standalone", "orientation": "portrait", "background_color": "#EEF0FB", "theme_color": "#4FB5E8",
+    "display": "standalone", "orientation": "portrait", "background_color": "#FFF9ED", "theme_color": "#4FB5E8",
     "icons": [{"src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any"}]}, indent=2))
+for n in ('icon.png', 'splash.mp4', 'splash-poster.jpg'):
+    if os.path.exists(os.path.join('assets', n)):
+        shutil.copyfile(os.path.join('assets', n), os.path.join(OUT, n))
 if not os.path.exists(os.path.join(OUT, 'icon.png')):
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
@@ -62,4 +65,4 @@ if not os.path.exists(os.path.join(OUT, 'icon.png')):
           g.fillStyle = '#FFD23F'; g.beginPath(); g.arc(256, 256, 150, 0, 6.2832); g.fill();
           g.fillStyle = '#E8453A'; g.beginPath(); g.arc(346, 172, 62, 0, 6.2832); g.fill(); })()""")
         pg.screenshot(path=os.path.join(OUT, 'icon.png'), clip={'x': 0, 'y': 0, 'width': 512, 'height': 512}); br.close()
-print('version', VER, {n: os.path.getsize(os.path.join(OUT, n)) for n in ('index.html', 'sw.js', 'manifest.webmanifest', 'icon.png')})
+print('version', VER, {n: os.path.getsize(os.path.join(OUT, n)) for n in ('index.html', 'sw.js', 'manifest.webmanifest', 'icon.png', 'splash.mp4', 'splash-poster.jpg')})
