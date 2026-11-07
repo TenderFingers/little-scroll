@@ -225,7 +225,7 @@ body {
   position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 9vh); z-index: 12;
   display: flex; justify-content: center; padding: 0 12px; box-sizing: border-box;
   pointer-events: none; opacity: 0; transform: translateY(16px) scale(0.96);
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition: opacity 0.12s ease, transform 0.12s ease;
 }
 #card.on { opacity: 1; transform: none; }
 #cardTxt {
@@ -620,7 +620,7 @@ body {
   var ask = $('ask'), askQ = $('askQ'), askBtns = $('askBtns'), askT = 0, askAns = 0;
   var voiceEl = new Audio();
 
-  var VERSION = '2026-11-07f';
+  var VERSION = '2026-11-07g';
   var DEFAULTS = { dir: 'v', auto: 'off', react: 'bounce', spin: 'on', fx: 'streak', sound: 'quiet', fit: 'fit', sleep: '5', voice: 'tap', flash: 'off', album: 'all', splash: 'on', pre: 'on', gate: 'math' };
   var cfg = {};
   for (var dk in DEFAULTS) cfg[dk] = DEFAULTS[dk];
@@ -1010,8 +1010,11 @@ body {
       shownEl = el;
       cardHide();
       if (cfg.flash === 'on' && sheet.hidden && el && el.firstElementChild) {
-        speak(el.firstElementChild, true);
         cardShow(items[+el.dataset.i]);
+        speak(el.firstElementChild, true);
+      }
+      if (cfg.flash !== 'off' || cfg.voice === 'tap') {
+        for (var pi = 0; pi < feed.children.length; pi++) primeVoice(items[+feed.children[pi].dataset.i]);
       }
     }
   }
@@ -1057,6 +1060,40 @@ body {
     else if (kind === 'chime') [784, 988, 1175, 1568].forEach(function (f, i) { tone(f, t + i * 0.16, 0.9, v * 0.8, 'sine'); });
     else if (kind === 'tick') tone(330, t, 0.1, v * 0.6, 'triangle', 260);
   }
+  function ensureCtx() {
+    if (!actx) { try { var AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); } catch (e) {} }
+    if (actx && actx.state === 'suspended') { try { actx.resume(); } catch (e) {} }
+    return actx;
+  }
+  // Recorded names are decoded ahead of time so they start the instant a card shows.
+  var vcache = [], voiceSrc = null;
+  function primeVoice(it) {
+    if (!it || !it.voice || it.vbuf || it.vbusy || it.vfail || !it.voice.arrayBuffer) return;
+    var c = ensureCtx();
+    if (!c) return;
+    it.vbusy = true;
+    it.voice.arrayBuffer().then(function (ab) {
+      return new Promise(function (res, rej) {
+        var p = c.decodeAudioData(ab, res, rej);
+        if (p && p.catch) p.catch(rej);
+      });
+    }).then(function (buf) {
+      it.vbuf = buf; vcache.push(it);
+      while (vcache.length > 16) { var o = vcache.shift(); if (o !== it) o.vbuf = null; }
+    }).catch(function () { it.vfail = true; }).then(function () { it.vbusy = false; });
+  }
+  function playVoice(it) {
+    var c = actx;
+    if (!it.vbuf || !c || c.state !== 'running') return false;
+    try {
+      if (voiceSrc) { try { voiceSrc.stop(); } catch (e) {} }
+      try { voiceEl.pause(); } catch (e) {}
+      var src = c.createBufferSource();
+      src.buffer = it.vbuf; src.connect(c.destination); src.start(0);
+      voiceSrc = src;
+      return true;
+    } catch (e) { return false; }
+  }
   function sfx(kind) {
     if (cfg.sound === 'off') return;
     try {
@@ -1071,7 +1108,7 @@ body {
   var TAP_MS = 280, MOVE_PX = 14, DBL_MS = 320, DBL_PX = 48;
   var press = null, lastTap = { t: 0, x: 0, y: 0 }, pt = { x: 0, y: 0 };
 
-  function touched() { lastInput = performance.now(); autoHoldUntil = lastInput + 5000; }
+  function touched() { lastInput = performance.now(); autoHoldUntil = lastInput + 5000; ensureCtx(); }
   ['pointerdown', 'pointerup', 'pointercancel'].forEach(function (t) { document.addEventListener(t, touched, true); });
 
   function replay(im, cls) {
@@ -1100,6 +1137,8 @@ body {
     if (!force && cfg.voice !== 'tap') return;
     var sl = im.parentNode, it = sl && items[+sl.dataset.i];
     if (!it || !it.voice) return;
+    if (playVoice(it)) return;
+    primeVoice(it);
     try {
       if (!it.vurl) it.vurl = URL.createObjectURL(it.voice);
       voiceEl.src = it.vurl;
@@ -1142,8 +1181,8 @@ body {
     if (!im) return;
     if (cfg.flash === 'tap') {
       replay(im, 'boing');
-      speak(im, true);
       cardShow(items[+s.dataset.i]);
+      speak(im, true);
       return;
     }
     if (cfg.flash === 'on') {
@@ -1633,6 +1672,10 @@ body {
   }
   var mgrUI = { note: setVoiceNote, refresh: refreshActions };
   recBtn.addEventListener('click', function () { toggleRec(records[picked], mgrUI); });
+  $('lblIn').addEventListener('input', function () {
+    var rec = records[picked];
+    if (rec) { rec.label = $('lblIn').value.trim().slice(0, 24) || null; dirty = true; }
+  });
   $('lblIn').addEventListener('change', function () {
     var rec = records[picked];
     if (!rec) return;
@@ -1980,7 +2023,12 @@ body {
     if (show && narAlbum) { setOpt('album', narAlbum.id); if (cfg.flash === 'off') setOpt('flash', 'on'); }
     useRecords();
   }
-  narRecBtn.addEventListener('click', function () { toggleRec(narList[narI], narUI); });
+  narWord.addEventListener('input', function () {
+    var rec = narList[narI];
+    if (rec) { rec.label = narWord.value.trim().slice(0, 24) || null; dirty = true; }
+  });
+  narWord.addEventListener('change', narSave);
+  narRecBtn.addEventListener('click', function () { if (!recState) narSave(); toggleRec(narList[narI], narUI); });
   narPlayBtn.addEventListener('click', function () {
     var rec = narList[narI];
     if (!rec || !rec.voice) return;
@@ -1991,8 +2039,8 @@ body {
     if (pr && pr.catch) pr.catch(function () {});
   });
   narNextBtn.addEventListener('click', function () { narAdvance(true); });
-  narSkipBtn.addEventListener('click', function () { narAdvance(false); });
-  $('narLater').addEventListener('click', function () { if (!recState) narFinish(); });
+  narSkipBtn.addEventListener('click', function () { narAdvance(true); });
+  $('narLater').addEventListener('click', function () { if (recState) return; narSave(); narFinish(); });
   narWord.addEventListener('keydown', function (e) { if (e.key === 'Enter') narWord.blur(); });
   $('narShow').addEventListener('click', function () { narClose(true); });
   $('narNo').addEventListener('click', function () { narClose(false); });
