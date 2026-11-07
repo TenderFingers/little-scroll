@@ -291,7 +291,14 @@ body {
   font: 800 16px/1.2 var(--f-body);
   cursor: pointer;
 }
-.seg.ico-row { grid-template-columns: repeat(5, 1fr); }
+.seg.ico-row { grid-template-columns: repeat(var(--n, 5), 1fr); }
+.lrow { display: flex; align-items: center; gap: 8px; }
+.info {
+  width: 28px; height: 28px; padding: 0; border-radius: 50%;
+  border: 1.5px solid var(--muted); background: transparent; color: var(--muted);
+  font: italic 800 15px/1 var(--f-body); cursor: pointer;
+}
+.info[aria-expanded="true"] { background: var(--muted); color: var(--bg, #fff); }
 .seg-btn.ico { display: flex; align-items: center; justify-content: center; padding: 0; }
 .seg-btn svg { width: 28px; height: 28px; display: block; }
 .seg-btn[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
@@ -503,7 +510,7 @@ body {
   var ask = $('ask'), askQ = $('askQ'), askBtns = $('askBtns'), askT = 0, askAns = 0;
   var voiceEl = new Audio();
 
-  var VERSION = '2026-11-07a';
+  var VERSION = '2026-11-07b';
   var DEFAULTS = { dir: 'v', auto: 'off', react: 'bounce', spin: 'on', fx: 'streak', sound: 'quiet', fit: 'fit', sleep: '5', voice: 'tap', pre: 'on', gate: 'math' };
   var cfg = {};
   for (var dk in DEFAULTS) cfg[dk] = DEFAULTS[dk];
@@ -1188,44 +1195,77 @@ body {
     streak: '<path d="M16 4v7M16 21v7M4 16h7M21 16h7M7.5 7.5l5 5M19.5 19.5l5 5M24.5 7.5l-5 5M12.5 19.5l-5 5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/>',
     sparkle: '<path d="M16 3C17 11 21 15 29 16C21 17 17 21 16 29C15 21 11 17 3 16C11 15 15 11 16 3Z" fill="currentColor"/>',
     bubble: '<g fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="21" r="6"/><circle cx="21" cy="12" r="5"/><circle cx="23" cy="23" r="3"/></g>',
-    star: '<path d="M16 3l3.8 8.2 8.9 1-6.6 6 1.8 8.8L16 22.5 8.1 27l1.8-8.8-6.6-6 8.9-1z" fill="currentColor"/>'
+    star: '<path d="M16 3l3.8 8.2 8.9 1-6.6 6 1.8 8.8L16 22.5 8.1 27l1.8-8.8-6.6-6 8.9-1z" fill="currentColor"/>',
+    'dir:v': '<path d="M16 4v24M9 11l7-7 7 7M9 21l7 7 7-7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    'dir:h': '<path d="M4 16h24M11 9l-7 7 7 7M21 9l7 7-7 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    'auto:slow': '<path d="M12 8l8 8-8 8" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    'auto:med': '<path d="M8 8l8 8-8 8M16 8l8 8-8 8" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    'auto:fast': '<path d="M4 9l7 7-7 7M12 9l7 7-7 7M20 9l7 7-7 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    'react:bounce': '<rect x="9" y="15" width="14" height="12" rx="3" fill="currentColor"/><path d="M10 10c3-4 9-4 12 0" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round"/>',
+    'react:wobble': '<rect x="9" y="9" width="14" height="14" rx="3" fill="currentColor" transform="rotate(12 16 16)"/><path d="M4 11v10M28 11v10M1.5 14v4M30.5 14v4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>',
+    'react:hearts': '<path d="M16 28C5 20 3 14 3 10.5 3 6.5 6 4 9.5 4 12.5 4 15 5.8 16 8.5 17 5.8 19.5 4 22.5 4 26 4 29 6.5 29 10.5 29 14 27 20 16 28z" fill="currentColor"/>',
+    'react:confetti': '<g fill="currentColor"><rect x="5" y="6" width="6" height="6" transform="rotate(20 8 9)"/><circle cx="23" cy="8" r="3"/><rect x="20" y="19" width="6" height="6" transform="rotate(-25 23 22)"/><circle cx="9" cy="23" r="3"/><path d="M15 12l4 7h-8z"/></g>',
+    'react:mix': '<rect x="5" y="5" width="22" height="22" rx="5" fill="none" stroke="currentColor" stroke-width="2.4"/><g fill="currentColor"><circle cx="11" cy="11" r="2"/><circle cx="21" cy="11" r="2"/><circle cx="16" cy="16" r="2"/><circle cx="11" cy="21" r="2"/><circle cx="21" cy="21" r="2"/></g>',
+    'spin:on': '<path d="M26 16a10 10 0 1 1-3-7.1" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/><path d="M26 4v7h-7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    'fit:fit': '<rect x="6" y="4" width="20" height="24" rx="2.5" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="6" y="11" width="20" height="10" fill="currentColor"/>',
+    'fit:fill': '<rect x="6" y="4" width="20" height="24" rx="2.5" fill="currentColor"/>',
+    'sound:off': '<path d="M5 12h5l7-6v20l-7-6H5z" fill="currentColor"/><path d="M21 12l7 8M28 12l-7 8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>',
+    'sound:quiet': '<path d="M5 12h5l7-6v20l-7-6H5z" fill="currentColor"/><path d="M21 12c2.4 2.4 2.4 5.6 0 8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/>',
+    'sound:normal': '<path d="M4 12h5l7-6v20l-7-6H4z" fill="currentColor"/><path d="M20 12c2.4 2.4 2.4 5.6 0 8M24 8c4.4 4.4 4.4 11.6 0 16" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/>',
+    'voice:tap': '<rect x="12" y="3" width="8" height="15" rx="4" fill="currentColor"/><path d="M8 15c0 5 3 8 8 8s8-3 8-8M16 23v5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/>',
+    'pre:on': '<circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M16 15v7" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><circle cx="16" cy="10.5" r="1.8" fill="currentColor"/>'
   };
   var OPTS = [
-    { key: 'dir', label: 'Scroll direction', vals: [['v', 'Up and down'], ['h', 'Side to side']] },
-    { key: 'auto', label: 'Auto-scroll', vals: [['off', 'Off'], ['slow', 'Slow'], ['med', 'Medium'], ['fast', 'Fast']],
+    { key: 'dir', icons: true, label: 'Scroll direction', vals: [['v', 'Up and down'], ['h', 'Side to side']] },
+    { key: 'auto', icons: true, label: 'Auto-scroll', vals: [['off', 'Off'], ['slow', 'Slow'], ['med', 'Medium'], ['fast', 'Fast']],
       tip: 'Photos drift by on their own. Touching the screen pauses it for a few seconds.' },
-    { key: 'react', label: 'When a photo is tapped', vals: [['off', 'Nothing'], ['bounce', 'Bounce'], ['wobble', 'Wobble'], ['hearts', 'Hearts'], ['confetti', 'Confetti'], ['mix', 'Surprise me']] },
-    { key: 'spin', label: 'Double-tap spin', vals: [['on', 'On'], ['off', 'Off']] },
+    { key: 'react', icons: true, label: 'When a photo is tapped', vals: [['off', 'Nothing'], ['bounce', 'Bounce'], ['wobble', 'Wobble'], ['hearts', 'Hearts'], ['confetti', 'Confetti'], ['mix', 'Surprise me']] },
+    { key: 'spin', icons: true, label: 'Double-tap spin', vals: [['on', 'On'], ['off', 'Off']] },
     { key: 'fx', label: 'Fireworks when held', icons: true, vals: [['off', 'Off'], ['streak', 'Streaks'], ['sparkle', 'Sparkles'], ['bubble', 'Bubbles'], ['star', 'Stars']] },
-    { key: 'fit', label: 'Photo size', vals: [['fit', 'Whole photo'], ['fill', 'Fill screen']],
+    { key: 'fit', icons: true, label: 'Photo size', vals: [['fit', 'Whole photo'], ['fill', 'Fill screen']],
       tip: 'Whole photo shows all of it with colored bars if needed. Fill screen crops the photo to cover the screen.' },
-    { key: 'sound', label: 'Sounds', vals: [['off', 'Off'], ['quiet', 'Quiet'], ['normal', 'Normal']],
+    { key: 'sound', icons: true, label: 'Sounds', vals: [['off', 'Off'], ['quiet', 'Quiet'], ['normal', 'Normal']],
       tip: 'A pop on tap, a chime on spin, and a soft tick when the photo changes. The ringer switch can mute it on some phones.' },
-    { key: 'voice', label: 'Recorded names', vals: [['off', 'Off'], ['tap', 'Play on tap']],
+    { key: 'voice', icons: true, label: 'Recorded names', vals: [['off', 'Off'], ['tap', 'Play on tap']],
       tip: 'Plays the name you recorded for a photo when your child taps it. Record names under "Select / Remove photos".' },
     { key: 'sleep', label: 'Go dark after no touching', vals: [['0', 'Never'], ['2', '2 min'], ['5', '5 min'], ['10', '10 min']],
       tip: 'The screen turns fully black and the app stops working so the battery lasts. A touch wakes it. With Never, the screen stays on until the phone locks it.' },
-    { key: 'pre', label: 'Tip before adding photos', vals: [['on', 'On'], ['off', 'Off']] },
+    { key: 'pre', icons: true, label: 'Tip before adding photos', vals: [['on', 'On'], ['off', 'Off']] },
     { key: 'gate', label: 'Opening this menu', vals: [['hold', 'Hold only'], ['math', 'Hold, then a sum'], ['shape', 'Hold, then a shape']],
       tip: 'The question is a simple sum, or a shape to name, that only grown-ups will answer.' }
   ];
   OPTS.forEach(function (o) {
     var f = document.createElement('div'); f.className = 'field';
+    var head = document.createElement('div'); head.className = 'lrow';
     var lab = document.createElement('span'); lab.className = 'label'; lab.id = 'lab-' + o.key; lab.textContent = o.label;
-    var seg = document.createElement('div'); seg.className = 'seg'; seg.setAttribute('role', 'group'); if (o.icons) seg.classList.add('ico-row'); seg.setAttribute('aria-labelledby', lab.id);
+    head.appendChild(lab);
+    var tp = null;
+    if (o.tip) {
+      tp = document.createElement('p'); tp.className = 'tip'; tp.textContent = o.tip; tp.hidden = true; tp.id = 'tip-' + o.key;
+      var inf = document.createElement('button');
+      inf.type = 'button'; inf.className = 'info'; inf.textContent = 'i';
+      inf.setAttribute('aria-label', 'About ' + o.label); inf.setAttribute('aria-expanded', 'false'); inf.setAttribute('aria-controls', tp.id);
+      inf.addEventListener('click', function () {
+        tp.hidden = !tp.hidden;
+        inf.setAttribute('aria-expanded', tp.hidden ? 'false' : 'true');
+      });
+      head.appendChild(inf);
+    }
+    var seg = document.createElement('div'); seg.className = 'seg'; seg.setAttribute('role', 'group'); seg.setAttribute('aria-labelledby', lab.id);
+    if (o.icons) { seg.classList.add('ico-row'); seg.style.setProperty('--n', o.vals.length); }
     o.vals.forEach(function (v) {
       var b = document.createElement('button');
       b.type = 'button'; b.className = 'seg-btn';
       if (o.icons) {
         b.classList.add('ico'); b.title = v[1]; b.setAttribute('aria-label', v[1]);
-        b.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true">' + ICO[v[0]] + '</svg>';
+        b.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true">' + (ICO[o.key + ':' + v[0]] || ICO[v[0]]) + '</svg>';
       } else b.textContent = v[1];
       b.dataset.key = o.key; b.dataset.val = v[0];
       seg.appendChild(b);
     });
-    f.appendChild(lab); f.appendChild(seg);
+    f.appendChild(head); f.appendChild(seg);
     if (o.icons) { var nm = document.createElement('p'); nm.className = 'tip'; nm.id = 'nm-' + o.key; f.appendChild(nm); }
-    if (o.tip) { var tp = document.createElement('p'); tp.className = 'tip'; tp.textContent = o.tip; f.appendChild(tp); }
+    if (tp) f.appendChild(tp);
     optsEl.appendChild(f);
   });
   optsEl.addEventListener('click', function (e) {

@@ -1,4 +1,4 @@
-var CACHE = 'little-scroll-2026-11-07a';
+var CACHE = 'little-scroll-2026-11-07b';
 var FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon.png'];
 
 self.addEventListener('install', function (e) {
