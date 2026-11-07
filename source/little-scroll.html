@@ -427,7 +427,8 @@ body {
 .alist { display: flex; flex-direction: column; gap: 8px; }
 .arow { display: flex; gap: 8px; }
 .arow .btn { flex: 1; }
-.arow .aedit { flex: 0 0 auto; }
+.arow .aedit, .arow .atrash { flex: 0 0 auto; }
+.atrash[data-armed="1"] { background: #D9534F; color: #fff; border-color: transparent; }
 .aname[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: transparent; }
 #albumsPanel input[type="text"] {
   box-sizing: border-box; flex: 1; min-width: 0; min-height: 56px; padding: 0 14px;
@@ -560,7 +561,7 @@ body {
   var ask = $('ask'), askQ = $('askQ'), askBtns = $('askBtns'), askT = 0, askAns = 0;
   var voiceEl = new Audio();
 
-  var VERSION = '2026-11-07d';
+  var VERSION = '2026-11-07e';
   var DEFAULTS = { dir: 'v', auto: 'off', react: 'bounce', spin: 'on', fx: 'streak', sound: 'quiet', fit: 'fit', sleep: '5', voice: 'tap', flash: 'off', album: 'all', splash: 'on', pre: 'on', gate: 'math' };
   var cfg = {};
   for (var dk in DEFAULTS) cfg[dk] = DEFAULTS[dk];
@@ -1712,6 +1713,22 @@ body {
         e.type = 'button'; e.className = 'btn aedit'; e.textContent = 'Edit';
         e.addEventListener('click', function () { openAlbumEdit(a); });
         r.appendChild(e);
+        var t = document.createElement('button');
+        t.type = 'button'; t.className = 'btn atrash'; t.textContent = '\uD83D\uDDD1';
+        t.setAttribute('aria-label', 'Delete album ' + a.name);
+        t.addEventListener('click', function () {
+          if (t.dataset.armed !== '1') {
+            list.querySelectorAll('.atrash').forEach(function (o) { o.dataset.armed = '0'; o.textContent = '\uD83D\uDDD1'; });
+            t.dataset.armed = '1'; t.textContent = 'Delete?';
+            setTimeout(function () { if (t.isConnected) { t.dataset.armed = '0'; t.textContent = '\uD83D\uDDD1'; } }, 4000);
+            return;
+          }
+          albums = albums.filter(function (x) { return x.id !== a.id; });
+          saveAlbums();
+          if (cfg.album === a.id) setOpt('album', 'all');
+          renderAlbums(); updateUI();
+        });
+        r.appendChild(t);
       }
       list.appendChild(r);
     }
