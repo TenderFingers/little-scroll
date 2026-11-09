@@ -416,7 +416,7 @@ html[data-edge="off"] .edge { display: none; }
 .thumb:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 #sleep { position: fixed; inset: 0; z-index: 40; background: var(--black); touch-action: none; cursor: pointer; }
 
-#ask, #pre {
+#ask, #pre, #pin {
   position: fixed;
   z-index: 22;
   left: 50%;
@@ -434,11 +434,31 @@ html[data-edge="off"] .edge { display: none; }
   text-align: center;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
 }
-#ask p, #pre p { margin: 0; font: 600 20px/1.2 var(--f-display); }
+#ask p, #pre p, #pin p { margin: 0; font: 600 20px/1.2 var(--f-display); }
 #pre .tip { font: 600 15px/1.4 var(--f-body); text-align: left; }
 .chk { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; font-weight: 800; font-size: 15px; }
 .chk input { width: 22px; height: 22px; }
 #ask #askQ { font-size: 42px; }
+#pin .tip { font: 600 15px/1.4 var(--f-body); }
+#pinDots { display: flex; justify-content: center; gap: 16px; min-height: 22px; }
+#pinDots i { width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid var(--fg); box-sizing: border-box; }
+#pinDots i.on { background: var(--fg); }
+#pinPad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+#pinPad .btn { min-height: 62px; font-size: 26px; }
+#pinPad .gap { visibility: hidden; }
+#pin.shake { animation: pinShake 0.35s ease; }
+@keyframes pinShake { 20% { transform: translate(calc(-50% - 10px), -50%); } 40% { transform: translate(calc(-50% + 10px), -50%); } 60% { transform: translate(calc(-50% - 6px), -50%); } 80% { transform: translate(calc(-50% + 6px), -50%); } }
+#pinForgot {
+  position: fixed; z-index: 23; font: 600 12px/1 var(--f-body); color: var(--muted); background: none; border: 0;
+  padding: 16px 14px; opacity: 0.75; cursor: pointer;
+}
+#pinForgot[hidden] { display: none; }
+#pinForgot.c0 { top: calc(env(safe-area-inset-top, 0px) + 6px); left: 6px; }
+#pinForgot.c1 { top: calc(env(safe-area-inset-top, 0px) + 6px); right: 6px; }
+#pinForgot.c2 { bottom: calc(env(safe-area-inset-bottom, 0px) + 6px); left: 6px; }
+#pinForgot.c3 { bottom: calc(env(safe-area-inset-bottom, 0px) + 6px); right: 6px; }
+.btn.playing { background: var(--accent); color: var(--on-accent); border-color: transparent; animation: playPulse 0.9s ease-in-out infinite; }
+@keyframes playPulse { 50% { filter: brightness(1.18); } }
 #askBtns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 #askBtns .btn { min-height: 68px; font-size: 28px; }
 .alist { display: flex; flex-direction: column; gap: 8px; }
@@ -541,6 +561,7 @@ html[data-edge="off"] .edge { display: none; }
   <div id="opts" class="opts"></div>
   <button id="calm" class="btn" type="button">Calm preset</button>
   <p class="tip">Calm preset turns off sounds, tap reactions, spin and fireworks.</p>
+  <button id="pinChange" class="btn" type="button">Change PIN</button>
   <button id="reset" class="btn" type="button">Reset settings</button>
   <button id="clear" class="btn" type="button" hidden>Remove all photos</button>
   <button id="done" class="btn" type="button">Back to the scroll</button>
@@ -556,6 +577,16 @@ html[data-edge="off"] .edge { display: none; }
   <div id="askBtns"></div>
   <button id="askCancel" class="btn" type="button">Cancel</button>
 </section>
+
+<section id="pin" role="dialog" aria-modal="true" aria-labelledby="pinT" hidden>
+  <p id="pinT">Grown-ups only</p>
+  <p id="pinSub" class="tip"></p>
+  <div id="pinDots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <div id="pinPad"></div>
+  <p id="pinMsg" class="tip" role="status"></p>
+  <button id="pinCancel" class="btn" type="button">Cancel</button>
+</section>
+<button id="pinForgot" type="button" hidden>Forgot PIN?</button>
 
 <section id="pre" role="dialog" aria-modal="true" aria-labelledby="preT" hidden>
   <p id="preT">Before you choose photos</p>
@@ -581,7 +612,7 @@ html[data-edge="off"] .edge { display: none; }
   var ask = $('ask'), askQ = $('askQ'), askBtns = $('askBtns'), askT = 0, askAns = 0;
   var voiceEl = new Audio();
 
-  var VERSION = '2026-11-09b';
+  var VERSION = '2026-11-09c';
   var DEFAULTS = { dir: 'v', auto: 'off', react: 'bounce', spin: 'on', fx: 'streak', sound: 'quiet', fit: 'fit', edge: 'narrow', sleep: '5', voice: 'tap', album: 'all', splash: 'on', pre: 'on', gate: 'math' };
   var cfg = {};
   for (var dk in DEFAULTS) cfg[dk] = DEFAULTS[dk];
@@ -1444,7 +1475,7 @@ html[data-edge="off"] .edge { display: none; }
     { key: 'sleep', label: 'Go dark after no touching', vals: [['0', 'Never'], ['2', '2 min'], ['5', '5 min'], ['10', '10 min']],
       tip: 'The screen turns fully black and the app stops working so the battery lasts. A touch wakes it. With Never, the screen stays on until the phone locks it.' },
     { key: 'pre', icons: true, label: 'Tip before adding photos', vals: [['on', 'On'], ['off', 'Off']] },
-    { key: 'gate', label: 'Opening this menu', vals: [['hold', 'Hold only'], ['math', 'Hold, then a sum'], ['shape', 'Hold, then a shape']],
+    { key: 'gate', label: 'Opening this menu', vals: [['hold', 'Hold only'], ['math', 'Hold, then a sum'], ['shape', 'Hold, then a shape'], ['pin', 'Hold, then a PIN']],
       tip: 'The question is a simple sum, or a shape to name, that only grown-ups will answer.' }
   ];
   OPTS.forEach(function (o) {
@@ -1512,6 +1543,7 @@ html[data-edge="off"] .edge { display: none; }
     else if (k === 'fx' && v === 'off') stopFx();
     else if (k === 'fit') feed.classList.toggle('fill', v === 'fill');
     else if (k === 'edge') applyEdge();
+    else if (k === 'gate' && v === 'pin' && !havePin()) showPin('set1');
     else if (k === 'album') { if (!demo && records.length) useRecords(); }
     else if (k === 'auto') syncAuto();
     else if (k === 'sleep') { lastInput = performance.now(); armSleep(); }
@@ -1600,6 +1632,7 @@ html[data-edge="off"] .edge { display: none; }
   function setSession(type) { try { if (navigator.audioSession) navigator.audioSession.type = type; } catch (e) {} }
   function resetRm() { rmArmed = false; clearTimeout(rmT); rmBtn.textContent = 'Remove photo'; }
   function refreshActions() {
+    resetDv(); playDone(); try { voiceEl.pause(); } catch (e) {}
     var rec = picked >= 0 ? records[picked] : null;
     photoActions.hidden = !rec;
     if (!rec) return;
@@ -1684,18 +1717,25 @@ html[data-edge="off"] .edge { display: none; }
   }
   var mgrUI = { note: setVoiceNote, refresh: refreshActions };
   recBtn.addEventListener('click', function () { toggleRec(records[picked], mgrUI); });
+  function playDone() { playBtn.classList.remove('playing'); playBtn.textContent = 'Play name'; }
+  ['ended', 'pause', 'error'].forEach(function (t) { voiceEl.addEventListener(t, playDone); });
   playBtn.addEventListener('click', function () {
     var rec = records[picked];
     if (!rec || !rec.voice) return;
     if (prevPlay) URL.revokeObjectURL(prevPlay);
     prevPlay = URL.createObjectURL(rec.voice);
     voiceEl.src = prevPlay;
+    playBtn.classList.add('playing'); playBtn.textContent = 'Playing\u2026';
     var pr = voiceEl.play();
-    if (pr && pr.catch) pr.catch(function () {});
+    if (pr && pr.catch) pr.catch(playDone);
   });
+  var dvArmed = false, dvT = 0;
+  function resetDv() { dvArmed = false; clearTimeout(dvT); delVoiceBtn.textContent = 'Delete name'; }
   delVoiceBtn.addEventListener('click', function () {
     var rec = records[picked];
     if (!rec) return;
+    if (!dvArmed) { dvArmed = true; delVoiceBtn.textContent = 'Tap again to delete name'; dvT = setTimeout(resetDv, 4000); return; }
+    resetDv();
     rec.voice = null; rec.vtype = null;
     dirty = true;
     saveVoice(rec);
@@ -1718,7 +1758,12 @@ html[data-edge="off"] .edge { display: none; }
 
   function openSheet() { updateUI(); sheet.hidden = false; shade.hidden = false; }
   function gateOpen() {
+    resetAfterAsk = false;
     if (cfg.gate === 'hold') { openSheet(); return; }
+    if (cfg.gate === 'pin') {
+      if (havePin()) { pinFails = 0; showPin('enter'); } else { openAfterSet = true; showPin('set1'); }
+      return;
+    }
     askQuestion();
   }
   var SHAPES = {
@@ -1777,12 +1822,115 @@ html[data-edge="off"] .edge { display: none; }
   askBtns.addEventListener('click', function (e) {
     var bt = e.target.closest('.btn');
     if (!bt) return;
-    if (bt.dataset.n === String(askAns)) { closeAsk(); openSheet(); } else askQuestion();
+    if (bt.dataset.n === String(askAns)) {
+      var again = resetAfterAsk; resetAfterAsk = false;
+      closeAsk(); openSheet();
+      if (again) { openAfterSet = false; showPin('set1'); }
+    } else askQuestion();
   });
-  $('askCancel').addEventListener('click', closeAsk);
+  $('askCancel').addEventListener('click', function () { resetAfterAsk = false; closeAsk(); });
+
+  /* ---------- PIN: the birth year of a grown-up ---------- */
+  var pinEl = $('pin'), pinMode = '', pinBuf = '', pinFirst = '', pinFails = 0, pinTimer = 0, forgotN = 0, forgotPos = -1;
+  var resetAfterAsk = false, openAfterSet = false;
+  function pinHash(p) {
+    var h = 5381, t = 'ls-pin:' + p;
+    for (var i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) >>> 0;
+    return String(h);
+  }
+  function pinStored() { try { return localStorage.getItem('ls-pin'); } catch (e) { return null; } }
+  function pinStore(v) { try { localStorage.setItem('ls-pin', v); } catch (e) {} }
+  function havePin() { var v = pinStored(); return !!v && v !== 'none'; }
+  function pinDots() { var d = $('pinDots').children; for (var i = 0; i < d.length; i++) d[i].classList.toggle('on', i < pinBuf.length); }
+  function pinSay(t) { $('pinMsg').textContent = t || ''; }
+  function moveForgot() {
+    var n; do { n = (Math.random() * 4) | 0; } while (n === forgotPos);
+    forgotPos = n; $('pinForgot').className = 'c' + n;
+  }
+  function showPin(mode) {
+    pinMode = mode; pinBuf = ''; pinDots(); pinSay('');
+    $('pinT').textContent = mode === 'set1' ? 'Set a grown-up PIN' : mode === 'set2' ? 'One more time' : 'Grown-ups only';
+    $('pinSub').textContent = mode === 'set1' ? 'What is your birth year? Those four digits become the PIN for the parent menu.'
+      : mode === 'set2' ? 'Enter your birth year again to confirm.' : 'Enter your PIN.';
+    $('pinCancel').textContent = (mode !== 'enter' && pinStored() === null) ? 'Not now' : 'Cancel';
+    forgotN = 0;
+    $('pinForgot').hidden = mode !== 'enter';
+    if (mode === 'enter') moveForgot();
+    pinEl.hidden = false; shade.hidden = false;
+    clearTimeout(pinTimer);
+    if (mode === 'enter') pinTimer = setTimeout(closePin, 30000);
+  }
+  function closePin() {
+    clearTimeout(pinTimer);
+    pinEl.hidden = true; $('pinForgot').hidden = true; pinMode = '';
+    if (sheet.hidden && ask.hidden) shade.hidden = true;
+  }
+  function pinWrong(msg) {
+    pinBuf = ''; pinDots();
+    pinEl.classList.remove('shake'); void pinEl.offsetWidth; pinEl.classList.add('shake');
+    pinSay(msg);
+  }
+  function pinDone() {
+    var code = pinBuf;
+    if (pinMode === 'enter') {
+      if (pinHash(code) === pinStored()) { pinFails = 0; closePin(); openSheet(); return; }
+      pinFails++;
+      if (pinFails >= 3) { pinFails = 0; closePin(); return; }
+      pinWrong('Not quite. Try again.');
+    } else if (pinMode === 'set1') {
+      pinFirst = code; showPin('set2');
+    } else if (pinMode === 'set2') {
+      if (code === pinFirst) {
+        pinStore(pinHash(code));
+        closePin();
+        setOpt('gate', 'pin');
+        showStatus('PIN saved.', 2500);
+        if (openAfterSet) { openAfterSet = false; openSheet(); }
+      } else { pinFirst = ''; showPin('set1'); pinSay('Those did not match. Start again.'); }
+    }
+  }
+  (function () {
+    var pad = $('pinPad'), keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '\u232B'];
+    keys.forEach(function (k) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = k ? 'btn' : 'btn gap'; b.textContent = k; b.dataset.k = k;
+      if (!k) b.disabled = true;
+      pad.appendChild(b);
+    });
+    pad.addEventListener('click', function (e) {
+      var b = e.target.closest('.btn');
+      if (!b || !b.dataset.k) return;
+      forgotN = 0;
+      if (b.dataset.k === '\u232B') { pinBuf = pinBuf.slice(0, -1); pinDots(); return; }
+      if (pinBuf.length >= 4) return;
+      pinBuf += b.dataset.k; pinDots();
+      if (pinBuf.length === 4) setTimeout(pinDone, 140);
+    });
+  })();
+  $('pinCancel').addEventListener('click', function () {
+    var wasSet = pinMode !== 'enter';
+    closePin(); openAfterSet = false;
+    if (wasSet && pinStored() === null) pinStore('none');
+    if (!havePin() && cfg.gate === 'pin') setOpt('gate', 'math');
+  });
+  $('pinForgot').addEventListener('click', function () {
+    forgotN++;
+    if (forgotN >= 3) { forgotN = 0; closePin(); askQuestion(); resetAfterAsk = true; } else moveForgot();
+  });
+  $('pinChange').addEventListener('click', function () { openAfterSet = false; showPin('set1'); });
+  // First run: ask for the PIN once the opening splash is done.
+  function maybeFirstPin() {
+    if (pinStored() !== null) return;
+    var t = setInterval(function () {
+      if (!splashDone) return;
+      clearInterval(t);
+      setTimeout(function () { if (pinStored() === null && pinEl.hidden && sheet.hidden) { openAfterSet = false; showPin('set1'); } }, 700);
+    }, 300);
+  }
   function closeSheet() {
     sheet.hidden = true; shade.hidden = true; $('pre').hidden = true; resetClear(); resetReset(); hideBub();
     closeAsk();
+    closePin();
     closeManage();
     closeAlbums();
     if (dirty) { dirty = false; if (records.length) useRecords(); else makeDemo(); }
@@ -1808,7 +1956,7 @@ html[data-edge="off"] .edge { display: none; }
       return;
     }
     resetReset();
-    for (var k in DEFAULTS) setOpt(k, DEFAULTS[k]);
+    for (var k in DEFAULTS) { if (k === 'gate' && havePin()) continue; setOpt(k, DEFAULTS[k]); }
     showStatus('Settings reset. Your photos are untouched.', 2400);
   });
   var armed = false, armT = 0;
@@ -2058,6 +2206,8 @@ html[data-edge="off"] .edge { display: none; }
       if (p && p.catch) p.catch(quiet);
     }).catch(function () { endSplash(true); });
   }
+
+  maybeFirstPin();
 
   // Wait for the database however long it takes; demo mode only if it genuinely fails (loadStored sets dbOK = false).
   ready = loadStored().then(function (stored) {
