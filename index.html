@@ -145,6 +145,14 @@ body {
 }
 
 /* Parent gate */
+/* Edge guard: a hand holding the phone often leaves a thumb over the screen edge. These strips take that touch. */
+.edge {
+  position: fixed; z-index: 9; top: calc(env(safe-area-inset-top, 0px) + 72px); bottom: 0; width: var(--edge, 40px);
+  touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+#edgeL { left: 0; }
+#edgeR { right: 0; }
+html[data-edge="off"] .edge { display: none; }
 #gate {
   position: fixed;
   z-index: 10;
@@ -472,6 +480,7 @@ body {
 <main id="feed" aria-label="Photo scroll"></main>
 <canvas id="fx" aria-hidden="true"></canvas>
 
+<div id="edgeL" class="edge" aria-hidden="true"></div><div id="edgeR" class="edge" aria-hidden="true"></div>
 <button id="gate" type="button" aria-label="Parent menu. Hold for about a second and a half to open.">
   <svg viewBox="0 0 52 52" aria-hidden="true">
     <circle class="ring" cx="26" cy="26" r="24"></circle>
@@ -572,8 +581,8 @@ body {
   var ask = $('ask'), askQ = $('askQ'), askBtns = $('askBtns'), askT = 0, askAns = 0;
   var voiceEl = new Audio();
 
-  var VERSION = '2026-11-09a';
-  var DEFAULTS = { dir: 'v', auto: 'off', react: 'bounce', spin: 'on', fx: 'streak', sound: 'quiet', fit: 'fit', sleep: '5', voice: 'tap', album: 'all', splash: 'on', pre: 'on', gate: 'math' };
+  var VERSION = '2026-11-09b';
+  var DEFAULTS = { dir: 'v', auto: 'off', react: 'bounce', spin: 'on', fx: 'streak', sound: 'quiet', fit: 'fit', edge: 'narrow', sleep: '5', voice: 'tap', album: 'all', splash: 'on', pre: 'on', gate: 'math' };
   var cfg = {};
   for (var dk in DEFAULTS) cfg[dk] = DEFAULTS[dk];
   try {
@@ -1403,6 +1412,9 @@ body {
     'react:confetti': '<g fill="currentColor"><rect x="5" y="6" width="6" height="6" transform="rotate(20 8 9)"/><circle cx="23" cy="8" r="3"/><rect x="20" y="19" width="6" height="6" transform="rotate(-25 23 22)"/><circle cx="9" cy="23" r="3"/><path d="M15 12l4 7h-8z"/></g>',
     'react:mix': '<rect x="5" y="5" width="22" height="22" rx="5" fill="none" stroke="currentColor" stroke-width="2.4"/><g fill="currentColor"><circle cx="11" cy="11" r="2"/><circle cx="21" cy="11" r="2"/><circle cx="16" cy="16" r="2"/><circle cx="11" cy="21" r="2"/><circle cx="21" cy="21" r="2"/></g>',
     'spin:on': '<path d="M26 16a10 10 0 1 1-3-7.1" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/><path d="M26 4v7h-7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    'edge:off': '<rect x="8" y="3" width="16" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="2.4"/>',
+    'edge:narrow': '<rect x="8" y="3" width="16" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="9.5" y="9" width="3" height="14" rx="1" fill="currentColor"/><rect x="19.5" y="9" width="3" height="14" rx="1" fill="currentColor"/>',
+    'edge:wide': '<rect x="8" y="3" width="16" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="9.5" y="9" width="5.5" height="14" rx="1" fill="currentColor"/><rect x="17" y="9" width="5.5" height="14" rx="1" fill="currentColor"/>',
     'fit:fit': '<rect x="6" y="4" width="20" height="24" rx="2.5" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="6" y="11" width="20" height="10" fill="currentColor"/>',
     'fit:fill': '<rect x="6" y="4" width="20" height="24" rx="2.5" fill="currentColor"/>',
     'sound:off': '<path d="M5 12h5l7-6v20l-7-6H5z" fill="currentColor"/><path d="M21 12l7 8M28 12l-7 8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>',
@@ -1421,6 +1433,8 @@ body {
     { key: 'fx', label: 'Fireworks when held', icons: true, vals: [['off', 'Off'], ['streak', 'Streaks'], ['sparkle', 'Sparkles'], ['bubble', 'Bubbles'], ['star', 'Stars']] },
     { key: 'fit', icons: true, label: 'Photo size', vals: [['fit', 'Whole photo'], ['fill', 'Fill screen']],
       tip: 'Whole photo shows all of it with colored bars if needed. Fill screen crops the photo to cover the screen.' },
+    { key: 'edge', icons: true, label: 'Edge guard', vals: [['off', 'Off'], ['narrow', 'Narrow'], ['wide', 'Wide']],
+      tip: 'Ignores touches along the left and right edges, so a thumb hanging over the edge while holding the phone does not stop the scrolling.' },
     { key: 'sound', icons: true, label: 'Sounds', vals: [['off', 'Off'], ['quiet', 'Quiet'], ['normal', 'Normal']],
       tip: 'A pop on tap, a chime on spin, and a soft tick when the photo changes. The ringer switch can mute it on some phones.' },
     { key: 'voice', icons: true, label: 'Recorded names', vals: [['off', 'Off'], ['tap', 'Play on tap']],
@@ -1484,6 +1498,12 @@ body {
     bubT = setTimeout(hideBub, 1600);
   }
   sheet.addEventListener('scroll', hideBub, { passive: true });
+  function applyEdge() {
+    var d = document.documentElement;
+    d.dataset.edge = cfg.edge;
+    d.style.setProperty('--edge', cfg.edge === 'wide' ? '72px' : '40px');
+  }
+  applyEdge();
   function setOpt(k, v) {
     if (cfg[k] === v) return;
     cfg[k] = v;
@@ -1491,6 +1511,7 @@ body {
     if (k === 'dir') { horiz = v === 'h'; feed.classList.toggle('h', horiz); rebuild(); }
     else if (k === 'fx' && v === 'off') stopFx();
     else if (k === 'fit') feed.classList.toggle('fill', v === 'fill');
+    else if (k === 'edge') applyEdge();
     else if (k === 'album') { if (!demo && records.length) useRecords(); }
     else if (k === 'auto') syncAuto();
     else if (k === 'sleep') { lastInput = performance.now(); armSleep(); }
